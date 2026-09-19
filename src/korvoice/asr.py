@@ -67,8 +67,14 @@ class _TranscribeWorker(QThread):
                 for i, chunk in enumerate(chunks):
                     wav_path = Path(tmp_dir) / f"chunk-{i}.wav"
                     write_wav(wav_path, chunk)
-                    text = self._model.transcribe(str(wav_path))
-                    if text:
+                    # transcribe() returns a TranscriptionResult (.text,
+                    # .words), not a plain string — confirmed against the
+                    # actually-installed GigaAM (git main, 0.2.0); the
+                    # README/PyPI 0.1.0 examples that show a bare string
+                    # are out of date.
+                    result = self._model.transcribe(str(wav_path))
+                    text = str(result.text if hasattr(result, "text") else result)
+                    if text.strip():
                         texts.append(text.strip())
             self.finished_ok.emit(" ".join(texts).strip())
         except Exception as exc:  # noqa: BLE001 — report, don't crash the app

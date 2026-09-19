@@ -25,14 +25,21 @@ dependencies = [
     "numpy>=1.24",
     "sounddevice>=0.4",
     "pynput>=1.7",
-    "torch<=2.5.1",
     # PyPI's own "gigaam" (0.1.0) predates the v3/e2e model lines (punctuation
     # + case restoration) korvoice defaults to — only the GitHub main branch
     # has them. This is a direct-reference dependency, so korvoice itself
     # can't be published to PyPI as-is (PyPI rejects direct references in
     # uploaded metadata) — see README "Install" for the current git-based
     # pipx command.
-    "gigaam @ git+https://github.com/salute-developers/GigaAM.git",
+    #
+    # The "torch" extra: GigaAM's own base install has no torch/torchaudio
+    # at all (bare `pip install gigaam` gets you neither — confirmed the
+    # hard way, `gigaam` imports but immediately fails on `torchaudio`
+    # missing). korvoice needing torch anyway, this is the extra to ask
+    # for, not a bare separate "torch" dependency of our own — one already
+    # tried, and conflicted with gigaam's own `torch>=2.6` floor (installed
+    # torch 2.5.1 quietly satisfied *our* looser pin but not gigaam's).
+    "gigaam[torch] @ git+https://github.com/salute-developers/GigaAM.git",
 ]
 
 [project.optional-dependencies]

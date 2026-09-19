@@ -6,12 +6,13 @@ __pycache__/
 .mypy_cache/
 .ruff_cache/
 .pytest_cache/
+build/
 
 # Secrets / local overrides — never commit the real one
 .env
 
-# Claude Code local session state (permission grants etc.), not shared config
-.claude/settings.local.json
+# Claude Code local session state — nothing under it so far is shared config
+.claude/
 
 # Editors / OS
 .DS_Store
