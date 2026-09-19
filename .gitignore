@@ -1,0 +1,17 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+.mypy_cache/
+.ruff_cache/
+.pytest_cache/
+
+# Secrets / local overrides — never commit the real one
+.env
+
+# Claude Code local session state (permission grants etc.), not shared config
+.claude/settings.local.json
+
+# Editors / OS
+.DS_Store

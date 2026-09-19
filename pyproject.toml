@@ -1,0 +1,64 @@
+[build-system]
+requires = ["setuptools>=69", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "korvoice"
+version = "0.1.0"
+description = "Push-to-talk / toggle Russian voice input for Linux, powered by the local GigaAM speech model — tray, Nord GUI, no cloud."
+readme = "README.md"
+license = { text = "GPL-3.0-or-later" }
+requires-python = ">=3.10"
+authors = [{ name = "Ivan Cherniy" }]
+keywords = ["speech-recognition", "asr", "gigaam", "voice-input", "dictation", "tray", "qt", "russian"]
+classifiers = [
+    "Environment :: X11 Applications :: Qt",
+    "Intended Audience :: End Users/Desktop",
+    "License :: OSI Approved :: GNU General Public License v3 or later (GPLv3+)",
+    "Operating System :: POSIX :: Linux",
+    "Programming Language :: Python :: 3",
+    "Topic :: Multimedia :: Sound/Audio :: Speech",
+]
+dependencies = [
+    "PySide6>=6.5",
+    "PyYAML>=6.0",
+    "numpy>=1.24",
+    "sounddevice>=0.4",
+    "pynput>=1.7",
+    "torch<=2.5.1",
+    # PyPI's own "gigaam" (0.1.0) predates the v3/e2e model lines (punctuation
+    # + case restoration) korvoice defaults to — only the GitHub main branch
+    # has them. This is a direct-reference dependency, so korvoice itself
+    # can't be published to PyPI as-is (PyPI rejects direct references in
+    # uploaded metadata) — see README "Install" for the current git-based
+    # pipx command.
+    "gigaam @ git+https://github.com/salute-developers/GigaAM.git",
+]
+
+[project.optional-dependencies]
+# No mypy: per this author's convention, strict typechecking is for
+# server/backend projects — optional for a small GUI utility like this one
+# (see ~/Cloud/Projects/template/skeletons/python/CLAUDE.md §1), and the
+# reference project this one is patterned after (kortalk) skips it too.
+dev = ["pytest>=8.2,<9", "pytest-qt>=4", "ruff>=0.5,<1"]
+
+[project.urls]
+Homepage = "https://r4ven.me"
+Repository = "https://github.com/r4ven-me/korvoice"
+
+[project.scripts]
+korvoice = "korvoice.app:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]
