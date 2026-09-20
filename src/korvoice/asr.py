@@ -10,12 +10,13 @@ from __future__ import annotations
 import logging
 import os
 import tempfile
+import time
 from pathlib import Path
 
 import numpy as np
 from PySide6.QtCore import QObject, QThread, Signal
 
-from .audio import split_on_silence, write_wav
+from .audio import SAMPLE_RATE, split_on_silence, write_wav
 from .config import Config
 
 log = logging.getLogger(__name__)
@@ -62,6 +63,7 @@ class _ModelLoadWorker(QThread):
         self.device = device
 
     def run(self) -> None:
+        t0 = time.monotonic()
         _configure_torch_threads()
         try:
             import gigaam
@@ -75,6 +77,7 @@ class _ModelLoadWorker(QThread):
             log.exception("failed to load GigaAM model %s", self.model_name)
             self.failed.emit(str(exc))
             return
+        log.debug("model %s loaded in %.2fs", self.model_name, time.monotonic() - t0)
         self.loaded.emit(model)
 
 
@@ -93,11 +96,15 @@ class _TranscribeWorker(QThread):
         self._max_seconds = max_seconds
 
     def run(self) -> None:
+        t0 = time.monotonic()
         try:
             chunks = split_on_silence(self._audio, self._max_seconds)
+            log.debug("transcribing %.2fs of audio as %d chunk(s)",
+                     len(self._audio) / max(1, SAMPLE_RATE), len(chunks))
             texts: list[str] = []
             with tempfile.TemporaryDirectory(prefix="korvoice-") as tmp_dir:
                 for i, chunk in enumerate(chunks):
+                    chunk_t0 = time.monotonic()
                     wav_path = Path(tmp_dir) / f"chunk-{i}.wav"
                     write_wav(wav_path, chunk)
                     # transcribe() returns a TranscriptionResult (.text,
@@ -107,8 +114,12 @@ class _TranscribeWorker(QThread):
                     # are out of date.
                     result = self._model.transcribe(str(wav_path))
                     text = str(result.text if hasattr(result, "text") else result)
+                    log.debug("chunk %d/%d (%.2fs audio): %.2fs to transcribe",
+                             i + 1, len(chunks), len(chunk) / max(1, SAMPLE_RATE),
+                             time.monotonic() - chunk_t0)
                     if text.strip():
                         texts.append(text.strip())
+            log.debug("all chunks done in %.2fs total", time.monotonic() - t0)
             self.finished_ok.emit(" ".join(texts).strip())
         except Exception as exc:  # noqa: BLE001 — report, don't crash the app
             log.exception("transcription failed")

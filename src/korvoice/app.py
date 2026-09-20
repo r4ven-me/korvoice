@@ -22,6 +22,7 @@ import os
 import shutil
 import signal
 import sys
+import time
 from pathlib import Path
 
 from PySide6.QtCore import QByteArray, QTimer
@@ -31,7 +32,7 @@ from PySide6.QtWidgets import QApplication, QMenu, QSystemTrayIcon
 
 from . import __version__, theme
 from .asr import Engine
-from .audio import Recorder, list_input_devices
+from .audio import SAMPLE_RATE, Recorder, list_input_devices
 from .config import Config
 from .hotkeys import GlobalHotkeys
 from .output import OutputDispatcher
@@ -267,6 +268,8 @@ class KorvoiceApp:
         self.settings_dialog: SettingsDialog | None = None
         self.history_window: HistoryWindow | None = None
         self._autotype_note = ""
+        self._record_started_at = 0.0
+        self._transcribe_started_at = 0.0
 
         theme.apply_theme(app, str(config.get("theme")))
         app.setQuitOnLastWindowClosed(False)
@@ -424,13 +427,18 @@ class KorvoiceApp:
                                   QSystemTrayIcon.MessageIcon.Warning)
             return
         self.state = "recording"
+        self._record_started_at = time.monotonic()
         self._update_tray_visuals()
 
     def _stop_recording(self) -> None:
         if self.state != "recording":
             return
         audio = self.recorder.stop()
+        held_for = time.monotonic() - self._record_started_at
+        log.debug("recording stopped: held %.2fs, captured %.2fs of audio",
+                 held_for, len(audio) / SAMPLE_RATE)
         self.state = "transcribing"
+        self._transcribe_started_at = time.monotonic()
         self._update_tray_visuals()
         self.engine.transcribe(audio)
 
@@ -440,6 +448,8 @@ class KorvoiceApp:
             self._update_tray_visuals()
 
     def _on_result(self, text: str) -> None:
+        log.debug("transcription finished in %.2fs: %r",
+                 time.monotonic() - self._transcribe_started_at, text)
         self.state = "idle"
         self._update_tray_visuals()
         if text:

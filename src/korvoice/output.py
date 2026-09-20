@@ -6,6 +6,7 @@ from __future__ import annotations
 import logging
 import shutil
 import subprocess
+import time
 
 from PySide6.QtCore import QObject, QThread, Signal
 from PySide6.QtGui import QGuiApplication
@@ -29,9 +30,12 @@ class _AutotypeWorker(QThread):
         self._command = command
 
     def run(self) -> None:
+        t0 = time.monotonic()
         try:
             subprocess.run(self._command, check=True, timeout=_AUTOTYPE_TIMEOUT)
+            log.debug("autotype finished in %.2fs", time.monotonic() - t0)
         except (subprocess.CalledProcessError, subprocess.TimeoutExpired, OSError) as exc:
+            log.debug("autotype failed after %.2fs", time.monotonic() - t0)
             self.failed.emit(str(exc))
 
 
