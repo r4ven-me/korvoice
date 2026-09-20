@@ -38,7 +38,7 @@ from . import (
     theme,
 )
 from .audio import list_input_devices
-from .config import DEVICE_CHOICES, MODE_CHOICES, MODEL_CHOICES, Config
+from .config import DEVICE_CHOICES, MODE_CHOICES, MODEL_CHOICES, SINGLE_KEY_CHOICES, Config
 
 AUTOSTART_FILE = Path.home() / ".config" / "autostart" / "korvoice.desktop"
 
@@ -124,27 +124,49 @@ class SettingsDialog(QDialog):
         )
         form.addRow("Recording mode:", self.mode_combo)
 
-        hotkey_row = QHBoxLayout()
+        hotkey_container = QVBoxLayout()
+        self.hotkey_type_combo = QComboBox()
+        self.hotkey_type_combo.addItem("Custom combination…", "")
+        for value, label in SINGLE_KEY_CHOICES:
+            self.hotkey_type_combo.addItem(label, value)
+        hotkey_container.addWidget(self.hotkey_type_combo)
+
+        self.hotkey_combo_row = QWidget()
+        combo_row_layout = QHBoxLayout(self.hotkey_combo_row)
+        combo_row_layout.setContentsMargins(0, 0, 0, 0)
         self.hotkey_record = QKeySequenceEdit(QKeySequence(self.config.hotkey("record")))
-        hotkey_row.addWidget(self.hotkey_record, 1)
+        combo_row_layout.addWidget(self.hotkey_record, 1)
         clear_hotkey = QPushButton("Clear")
         clear_hotkey.clicked.connect(self.hotkey_record.clear)
-        hotkey_row.addWidget(clear_hotkey)
-        form.addRow("Record hotkey:", hotkey_row)
+        combo_row_layout.addWidget(clear_hotkey)
+        hotkey_container.addWidget(self.hotkey_combo_row)
+        form.addRow("Record hotkey:", hotkey_container)
+
+        current_hotkey = self.config.hotkey("record")
+        single_key_index = self.hotkey_type_combo.findData(current_hotkey)
+        if single_key_index > 0:
+            self.hotkey_type_combo.setCurrentIndex(single_key_index)
+        self.hotkey_combo_row.setVisible(single_key_index <= 0)
+        self.hotkey_type_combo.currentIndexChanged.connect(self._hotkey_type_changed)
 
         self.autostart = QCheckBox("Start at login")
         self.autostart.setChecked(AUTOSTART_FILE.exists())
         form.addRow("", self.autostart)
 
         form.addRow("", QLabel(
-            "<i>X11: the key is grabbed by the application directly.<br>"
+            "<i>X11: the key is grabbed by the application directly — a single "
+            "modifier (e.g. Right Ctrl) works the same way as a combination.<br>"
             "Wayland: the system GlobalShortcuts portal is used — the "
-            "compositor may show a confirmation dialog.</i>"
+            "compositor may show a confirmation dialog, and a single-modifier "
+            "hotkey is best-effort (not every compositor supports it).</i>"
         ))
 
         settings_path = f"Settings file: {self.config.file_path()}"
         form.addRow("", QLabel(f"<i>{settings_path}</i>"))
         return page
+
+    def _hotkey_type_changed(self, _index: int) -> None:
+        self.hotkey_combo_row.setVisible(not self.hotkey_type_combo.currentData())
 
     # -- "Output" tab ------------------------------------------------------------
 
@@ -160,9 +182,10 @@ class SettingsDialog(QDialog):
         self.output_autotype = QCheckBox("Autotype into the focused window")
         self.output_autotype.setChecked(bool(self.config.get("output_autotype")))
         self.output_autotype.setToolTip(
-            "X11: types directly via pynput.\n"
-            "Wayland: requires ydotool + a running ydotoold with uinput access — "
-            "best-effort, fails silently into the tray tooltip if unavailable."
+            "X11: requires xdotool (a common system package, not installed by pip).\n"
+            "Wayland: requires ydotool + a running ydotoold with uinput access.\n"
+            "Both are best-effort — the reason shows up in the tray tooltip if "
+            "unavailable, clipboard/history output are unaffected either way."
         )
         layout.addWidget(self.output_autotype)
 
@@ -232,7 +255,9 @@ class SettingsDialog(QDialog):
         self.config.set("device", self.device_combo.currentData())
         self.config.set("chunk_max_seconds", self.chunk_seconds.value())
         self.config.set("input_device", self.input_device_combo.currentData())
-        self.config.set_hotkey("record", self.hotkey_record.keySequence().toString(_KEY_FMT))
+        single_key = self.hotkey_type_combo.currentData()
+        sequence = single_key or self.hotkey_record.keySequence().toString(_KEY_FMT)
+        self.config.set_hotkey("record", sequence)
 
         try:
             if self.autostart.isChecked():

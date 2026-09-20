@@ -7,12 +7,32 @@ import logging
 import shutil
 import subprocess
 
-from PySide6.QtCore import QObject, Signal
+from PySide6.QtCore import QObject, QThread, Signal
 from PySide6.QtGui import QGuiApplication
 
 from .config import Config
 
 log = logging.getLogger(__name__)
+
+_AUTOTYPE_TIMEOUT = 10  # seconds — a stuck xdotool/ydotool must not hang forever
+
+
+class _AutotypeWorker(QThread):
+    """Runs the blocking xdotool/ydotool subprocess off the GUI thread —
+    dispatch() used to call this inline, which froze the tray/UI for the
+    ~1s+ a longer sentence takes to type out synthetically."""
+
+    failed = Signal(str)
+
+    def __init__(self, command: list[str], parent=None) -> None:
+        super().__init__(parent)
+        self._command = command
+
+    def run(self) -> None:
+        try:
+            subprocess.run(self._command, check=True, timeout=_AUTOTYPE_TIMEOUT)
+        except (subprocess.CalledProcessError, subprocess.TimeoutExpired, OSError) as exc:
+            self.failed.emit(str(exc))
 
 
 class OutputDispatcher(QObject):
@@ -22,6 +42,10 @@ class OutputDispatcher(QObject):
     def __init__(self, config: Config, parent=None) -> None:
         super().__init__(parent)
         self.config = config
+        # Keeps running _AutotypeWorker instances referenced until they
+        # finish — letting the last reference drop while the underlying
+        # QThread is still alive is a use-after-free waiting to happen.
+        self._autotype_workers: list[_AutotypeWorker] = []
 
     def dispatch(self, text: str) -> None:
         if not text:
@@ -39,36 +63,49 @@ class OutputDispatcher(QObject):
             clipboard.setText(text)
 
     def _autotype(self, text: str) -> None:
+        command = self._autotype_command(text)
+        if command is None:
+            return  # _autotype_command already emitted the "unavailable" reason
+        worker = _AutotypeWorker(command, self)
+        worker.failed.connect(self._on_autotype_failed)
+        worker.finished.connect(lambda w=worker: self._forget_worker(w))
+        self._autotype_workers.append(worker)
+        worker.start()
+
+    def _on_autotype_failed(self, message: str) -> None:
+        log.warning("autotype failed: %s", message)
+        self.autotype_unavailable.emit(message)
+
+    def _forget_worker(self, worker: _AutotypeWorker) -> None:
+        if worker in self._autotype_workers:
+            self._autotype_workers.remove(worker)
+
+    def _autotype_command(self, text: str) -> list[str] | None:
+        """Builds the subprocess command for the current session type, or
+        emits autotype_unavailable and returns None. Both backends are
+        external system tools, not pip dependencies (see README):
+        - X11: `xdotool type` — pynput's alternative was tried first and
+          dropped, it raised InvalidCharacterException on Cyrillic (X11
+          keymap-remap limits reached mid-string), confirmed against real
+          Russian text; xdotool has no such issue.
+        - Wayland: `ydotool type`, needs its ydotoold daemon running with
+          uinput access — a real setup step beyond pipx install.
+        `--delay`/`--key-delay` trimmed from each tool's slower default to
+        speed up longer insertions."""
         if QGuiApplication.platformName() == "xcb":
-            self._autotype_x11(text)
-        else:
-            self._autotype_wayland(text)
+            tool = shutil.which("xdotool")
+            if not tool:
+                self.autotype_unavailable.emit(
+                    "xdotool not found — install it for autotype on X11 "
+                    "(e.g. sudo apt install xdotool)"
+                )
+                return None
+            return [tool, "type", "--clearmodifiers", "--delay", "3", "--", text]
 
-    def _autotype_x11(self, text: str) -> None:
-        try:
-            from pynput.keyboard import Controller
-        except ImportError as exc:
-            self.autotype_unavailable.emit(f"pynput not installed: {exc}")
-            return
-        try:
-            Controller().type(text)
-        except Exception as exc:  # noqa: BLE001 — autotype must not crash the app
-            log.warning("autotype (X11) failed: %s", exc)
-            self.autotype_unavailable.emit(str(exc))
-
-    def _autotype_wayland(self, text: str) -> None:
-        # ydotool needs a running ydotoold with uinput access — a real setup
-        # step beyond pipx install. Best-effort: fail quietly into the tray
-        # tooltip (see app.py's status text), never block clipboard/window
-        # output, which always work regardless of session type.
-        ydotool = shutil.which("ydotool")
-        if not ydotool:
+        tool = shutil.which("ydotool")
+        if not tool:
             self.autotype_unavailable.emit(
                 "ydotool not found — install it and run ydotoold for autotype on Wayland"
             )
-            return
-        try:
-            subprocess.run([ydotool, "type", "--", text], check=True, timeout=10)
-        except (subprocess.CalledProcessError, subprocess.TimeoutExpired, OSError) as exc:
-            log.warning("autotype (Wayland/ydotool) failed: %s", exc)
-            self.autotype_unavailable.emit(str(exc))
+            return None
+        return [tool, "type", "--key-delay", "3", "--", text]

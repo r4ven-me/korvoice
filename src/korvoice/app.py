@@ -192,7 +192,10 @@ def run_selftest(config: Config) -> int:
     report(f"microphone input device(s) found: {len(devices)}", len(devices) > 0,
            "no input device seen by sounddevice/PortAudio")
 
-    if platform != "xcb":
+    if platform == "xcb":
+        report("xdotool in PATH (X11 autotype)", shutil.which("xdotool") is not None,
+               "autotype will be unavailable on X11 without xdotool")
+    else:
         report("ydotool in PATH (Wayland autotype)", shutil.which("ydotool") is not None,
                "autotype will be unavailable on Wayland without ydotool + ydotoold")
 
@@ -303,6 +306,12 @@ class KorvoiceApp:
         self.hotkeys.activated.connect(self._hotkey_activated)
         self._apply_hotkeys()
 
+        # Warms the model now instead of on the first hotkey press — cold
+        # load (torch import + weights) measured at ~3-5s on this
+        # project's dev host, which otherwise landed entirely on the
+        # user's first-ever recording with no feedback why it's slow.
+        self.engine.preload()
+
     # -- input device -----------------------------------------------------------
 
     def _resolve_input_device(self) -> int | None:
@@ -360,9 +369,8 @@ class KorvoiceApp:
         self._update_tooltip()
 
     def _update_tray_visuals(self) -> None:
-        recording = self.state != "idle"
         self.tray.setIcon(theme.make_tray_icon(
-            theme.tray_icon_color(str(self.config.get("tray_icon"))), recording=recording))
+            theme.tray_icon_color(str(self.config.get("tray_icon"))), state=self.state))
         if hasattr(self, "record_action"):
             self.record_action.setText(self._record_action_label())
         self._update_tooltip()

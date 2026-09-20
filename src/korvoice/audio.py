@@ -25,22 +25,44 @@ log = logging.getLogger(__name__)
 
 
 class Recorder:
-    """Captures mono 16kHz audio from the given input device between
-    start() and stop(). sounddevice runs its callback on its own thread;
-    frames are appended to a plain list under a lock and concatenated on
-    stop() — recordings here are seconds to low tens of seconds, not long
-    enough for a queue/ring-buffer to matter."""
+    """Captures mono audio from the given input device between start() and
+    stop(), at the device's own native sample rate — a raw ALSA hw: device
+    (e.g. a USB mic exposed as "hw:0,0") only supports its own fixed rate
+    and raises PaInvalidSampleRate for anything else, confirmed against a
+    real USB microphone on this project's dev host. stop() resamples the
+    result to GigaAM's required 16kHz, so the recorded-at rate stays this
+    class's own concern — callers always get 16kHz back, as before.
+
+    sounddevice runs its callback on its own thread; frames are appended
+    to a plain list under a lock and concatenated on stop() — recordings
+    here are seconds to low tens of seconds, not long enough for a
+    queue/ring-buffer to matter."""
 
     def __init__(self, device: str | int | None = None) -> None:
         self.device: str | int | None = device or None
         self._frames: list[np.ndarray] = []
         self._stream: sd.InputStream | None = None
         self._lock = threading.Lock()
+        self._samplerate = SAMPLE_RATE
+
+    def _resolve_samplerate(self) -> int:
+        """The device's own default rate — sd.query_devices()'s `kind`
+        parameter only applies when `device` is unset (falls back to the
+        system default input device in that case)."""
+        try:
+            info = (sd.query_devices(self.device) if self.device is not None
+                    else sd.query_devices(kind="input"))
+            rate = int(info["default_samplerate"])
+            return rate if rate > 0 else SAMPLE_RATE
+        except (sd.PortAudioError, TypeError, ValueError, KeyError) as exc:
+            log.debug("could not resolve device sample rate, using %d: %s", SAMPLE_RATE, exc)
+            return SAMPLE_RATE
 
     def start(self) -> None:
         self._frames = []
+        self._samplerate = self._resolve_samplerate()
         self._stream = sd.InputStream(
-            samplerate=SAMPLE_RATE, channels=1, dtype=_DTYPE,
+            samplerate=self._samplerate, channels=1, dtype=_DTYPE,
             device=self.device, callback=self._callback,
         )
         self._stream.start()
@@ -53,7 +75,8 @@ class Recorder:
 
     def stop(self) -> np.ndarray:
         """Stops capture and returns the full recording as float32 in
-        [-1, 1]. Safe to call even if start() was never called."""
+        [-1, 1], resampled to SAMPLE_RATE (16kHz). Safe to call even if
+        start() was never called."""
         if self._stream is not None:
             self._stream.stop()
             self._stream.close()
@@ -62,7 +85,25 @@ class Recorder:
             frames, self._frames = self._frames, []
         if not frames:
             return np.zeros(0, dtype=np.float32)
-        return np.concatenate(frames)
+        audio = np.concatenate(frames)
+        if self._samplerate != SAMPLE_RATE:
+            audio = resample_linear(audio, self._samplerate, SAMPLE_RATE)
+        return audio
+
+
+def resample_linear(audio: np.ndarray, orig_sr: int, target_sr: int) -> np.ndarray:
+    """Linear-interpolation resample — no scipy/torchaudio dependency just
+    for this. Good enough for ASR input: GigaAM's own feature extraction
+    (log-mel spectrogram) is tolerant of the mild high-frequency smoothing
+    linear interpolation introduces, and this only ever runs once per
+    recording, not per-frame."""
+    if orig_sr == target_sr or len(audio) == 0:
+        return audio
+    duration = len(audio) / orig_sr
+    target_length = max(1, round(duration * target_sr))
+    orig_times = np.linspace(0.0, duration, num=len(audio), endpoint=False)
+    target_times = np.linspace(0.0, duration, num=target_length, endpoint=False)
+    return np.interp(target_times, orig_times, audio).astype(np.float32)
 
 
 def split_on_silence(

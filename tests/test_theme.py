@@ -38,9 +38,24 @@ def test_make_tray_icon_not_null(qapp):
     assert not icon.isNull()
 
 
-def test_make_tray_icon_recording_variant_not_null(qapp):
-    icon = theme.make_tray_icon(QColor("#ffffff"), recording=True)
-    assert not icon.isNull()
+def test_make_tray_icon_state_variants_not_null(qapp):
+    for state in ("idle", "recording", "transcribing"):
+        icon = theme.make_tray_icon(QColor("#ffffff"), state=state)
+        assert not icon.isNull()
+
+
+def test_make_tray_icon_states_render_differently(qapp):
+    # The whole point of the per-state dot (recording vs transcribing used
+    # to render identically, see theme.py's _STATE_DOT_COLORS) is that
+    # they're visually distinguishable — assert that directly, not just
+    # that each icon exists.
+    images = {
+        state: theme.make_tray_icon(QColor("#ffffff"), state=state).pixmap(64, 64).toImage()
+        for state in ("idle", "recording", "transcribing")
+    }
+    assert images["idle"] != images["recording"]
+    assert images["idle"] != images["transcribing"]
+    assert images["recording"] != images["transcribing"]
 
 
 def test_install_icon_file_writes_png(tmp_path, monkeypatch, qapp):

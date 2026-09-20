@@ -2,7 +2,45 @@ import wave
 
 import numpy as np
 
-from korvoice.audio import SAMPLE_RATE, split_on_silence, write_wav
+from korvoice.audio import SAMPLE_RATE, resample_linear, split_on_silence, write_wav
+
+
+def test_resample_linear_same_rate_returns_input_unchanged():
+    audio = np.array([0.1, 0.2, 0.3], dtype=np.float32)
+    result = resample_linear(audio, 16000, 16000)
+    np.testing.assert_array_equal(result, audio)
+
+
+def test_resample_linear_empty():
+    result = resample_linear(np.zeros(0, dtype=np.float32), 48000, 16000)
+    assert len(result) == 0
+
+
+def test_resample_linear_downsamples_to_expected_length():
+    # 1 second of audio at 48kHz (the native rate of a real USB mic on
+    # this project's dev host) should become ~1 second at 16kHz.
+    audio = np.zeros(48000, dtype=np.float32)
+    result = resample_linear(audio, 48000, 16000)
+    assert abs(len(result) - 16000) <= 1
+
+
+def test_resample_linear_upsamples_to_expected_length():
+    audio = np.zeros(16000, dtype=np.float32)
+    result = resample_linear(audio, 16000, 48000)
+    assert abs(len(result) - 48000) <= 1
+
+
+def test_resample_linear_preserves_frequency_content():
+    # A 440Hz tone at 48kHz resampled to 16kHz should still look like a
+    # ~440Hz tone — cheap sanity check via zero-crossing count rather than
+    # a full FFT comparison.
+    sr_in, sr_out, freq, duration = 48000, 16000, 440.0, 0.5
+    t = np.arange(int(sr_in * duration)) / sr_in
+    tone = np.sin(2 * np.pi * freq * t).astype(np.float32)
+    resampled = resample_linear(tone, sr_in, sr_out)
+    zero_crossings = int(np.sum(np.diff(np.sign(resampled)) != 0))
+    expected_crossings = 2 * freq * duration  # two crossings per cycle
+    assert abs(zero_crossings - expected_crossings) < expected_crossings * 0.05
 
 
 def test_split_on_silence_empty():

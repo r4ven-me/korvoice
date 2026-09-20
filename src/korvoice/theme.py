@@ -284,9 +284,16 @@ def _app_instance():
 # base), rather than a sourced SVG asset — simple enough to draw exactly,
 # and avoids pulling in and attributing a third-party icon for something
 # this plain. Recolourable at runtime like kortalk's raven, plus a "dot"
-# accent for the recording state.
+# accent distinguishing recording from transcribing — the two used to
+# render identically (both just "recording=True"), which read as one
+# state with no way to tell whether korvoice was still listening or
+# already done and just churning on the model.
 
-def _draw_mic(painter: QPainter, rect_size: int, color: QColor, recording: bool) -> None:
+# Icon accent colour per KorvoiceApp.state (app.py) — "idle" gets no dot.
+_STATE_DOT_COLORS = {"recording": "n11", "transcribing": "n13"}  # red / aurora yellow
+
+
+def _draw_mic(painter: QPainter, rect_size: int, color: QColor, state: str) -> None:
     painter.setRenderHint(QPainter.RenderHint.Antialiasing)
     painter.setPen(Qt.PenStyle.NoPen)
     painter.setBrush(color)
@@ -323,10 +330,11 @@ def _draw_mic(painter: QPainter, rect_size: int, color: QColor, recording: bool)
                       int(post_x + base_half), int(post_bottom))
     painter.setPen(pen)
 
-    if recording:
+    dot_color = _STATE_DOT_COLORS.get(state)
+    if dot_color:
         dot_r = s * 0.16
         painter.setPen(Qt.PenStyle.NoPen)
-        painter.setBrush(QColor(NORD["n11"]))
+        painter.setBrush(QColor(NORD[dot_color]))
         painter.drawEllipse(int(s - dot_r * 1.7), int(s - dot_r * 1.7),
                              int(dot_r * 1.6), int(dot_r * 1.6))
 
@@ -352,7 +360,7 @@ def install_icon_file() -> Path:
         image = QImage(128, 128, QImage.Format.Format_ARGB32)
         image.fill(Qt.GlobalColor.transparent)
         painter = QPainter(image)
-        _draw_mic(painter, 128, QColor(NORD["n10"]), recording=False)
+        _draw_mic(painter, 128, QColor(NORD["n10"]), state="idle")
         painter.end()
         image.save(str(ICON_FILE), "PNG")
     except OSError:
@@ -375,10 +383,14 @@ def tray_icon_color(setting: str) -> QColor | None:
     return QColor(tone) if tone else None
 
 
-def make_tray_icon(color: QColor | str | None = None, recording: bool = False) -> QIcon:
+def make_tray_icon(color: QColor | str | None = None, state: str = "idle") -> QIcon:
     """Monochrome microphone glyph. The default colour is the text colour
     of the current application palette, so the icon is light on dark
-    panels and dark on light panels. `recording` adds a small red dot."""
+    panels and dark on light panels. `state` ("idle"/"recording"/
+    "transcribing" — matches KorvoiceApp.state in app.py exactly, passed
+    straight through) adds a coloured dot for the two non-idle states,
+    red vs aurora yellow, so recording and transcribing are visually
+    distinct instead of both just reading as "something is happening"."""
     if color is None:
         app = _app_instance()
         color = (app.palette().color(QPalette.ColorRole.WindowText)
@@ -390,7 +402,7 @@ def make_tray_icon(color: QColor | str | None = None, recording: bool = False) -
         pixmap = QPixmap(size, size)
         pixmap.fill(Qt.GlobalColor.transparent)
         painter = QPainter(pixmap)
-        _draw_mic(painter, size, color, recording)
+        _draw_mic(painter, size, color, state)
         painter.end()
         icon.addPixmap(pixmap)
     return icon

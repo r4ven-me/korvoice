@@ -24,7 +24,11 @@ dependencies = [
     "PyYAML>=6.0",
     "numpy>=1.24",
     "sounddevice>=0.4",
-    "pynput>=1.7",
+    # No pynput: tried it for X11 autotype, it raised InvalidCharacterException
+    # on Cyrillic text (X11 keymap-remap limits reached mid-string, confirmed
+    # against real Russian text) — autotype shells out to xdotool (X11) /
+    # ydotool (Wayland) instead, both external system tools, see README.
+    #
     # PyPI's own "gigaam" (0.1.0) predates the v3/e2e model lines (punctuation
     # + case restoration) korvoice defaults to — only the GitHub main branch
     # has them. This is a direct-reference dependency, so korvoice itself

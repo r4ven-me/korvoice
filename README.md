@@ -22,9 +22,10 @@ history window. Everything runs on-device; nothing is sent anywhere.
 - **Tray + Nord GUI settings** — system / Nord dark / Nord light theme,
   same visual language across the settings dialog and history window.
 - **X11 and Wayland** — global hotkey via direct `XGrabKey` on X11, the
-  `GlobalShortcuts` portal on Wayland. Autotype on Wayland needs `ydotool`
-  (see Configuration below) — clipboard and the history window always work
-  regardless of session type.
+  `GlobalShortcuts` portal on Wayland. Autotype shells out to `xdotool`
+  (X11) or `ydotool` (Wayland) — see Configuration below — clipboard and
+  the history window always work regardless of session type or whether
+  either tool is installed.
 - **Autostart** — optional login autostart entry, toggled from Settings.
 
 ## Quick start
@@ -40,9 +41,10 @@ korvoice          # starts the tray daemon
 korvoice --check  # environment diagnostics (mic, ffmpeg, hotkey backend, gigaam)
 ```
 
-The first recording triggers a one-time GigaAM weight download (~1 GB,
-cached in `~/.cache/gigaam/`) — expect a pause the first time you use the
-hotkey.
+The GigaAM model (weights ~1 GB, cached in `~/.cache/gigaam/`) downloads
+and loads in the background as soon as the daemon starts, not on first
+use — the first hotkey press only has to wait for that warm-up if you
+press it within the first few seconds of starting korvoice.
 
 ## Usage / Configuration / CLI
 
@@ -62,7 +64,7 @@ Settings (`~/.config/korvoice/config.yaml`, YAML, written on every change):
 | Theme | `system` / `nord-dark` / `nord-light` | `system` |
 | Tray icon colour | `auto` / `dark` / `light` | `auto` |
 | Recording mode | `push_to_talk` / `toggle` | `push_to_talk` |
-| Record hotkey | any `Ctrl+Alt+...`-style sequence | `Ctrl+Alt+Space` |
+| Record hotkey | `Ctrl+Alt+...`-style combination, or a single modifier (Right/Left Ctrl/Shift/Alt/Super) | `Ctrl+Alt+Space` |
 | Model | `v3_e2e_ctc` / `v3_e2e_rnnt` / `v3_ctc` / `v3_rnnt` | `v3_e2e_ctc` |
 | Inference device | `auto` / `cpu` / `cuda` | `auto` |
 | Max chunk length | 5-24 seconds | `20` |
@@ -82,14 +84,21 @@ AMD is **not supported**: the RX580 and similar Polaris-generation cards
 only path back is a third-party patched ROCm/PyTorch Docker image — out of
 scope for this project for now.
 
-### Autotype on Wayland
+### Autotype
 
-X11 autotype works out of the box (`pynput`). Wayland has no equivalent
-portal for synthetic keyboard input, so autotype there shells out to
-[`ydotool`](https://github.com/ktr0731/ydotool), which needs its daemon
-(`ydotoold`) running with access to `/dev/uinput`. If that isn't set up,
-autotype silently fails and the reason shows up in the tray tooltip —
-clipboard and the history window are unaffected either way.
+Both backends are external system tools, not pip dependencies:
+
+- **X11**: [`xdotool`](https://github.com/jordansissel/xdotool)
+  (`sudo apt install xdotool` or your distro's equivalent). Tried
+  [`pynput`](https://pypi.org/project/pynput/) first — dropped it, it
+  raises `InvalidCharacterException` partway through Cyrillic text (X11
+  keymap-remap limits), which is most of what this app types.
+- **Wayland**: [`ydotool`](https://github.com/ktr0731/ydotool), whose
+  daemon (`ydotoold`) needs to be running with access to `/dev/uinput`.
+
+If the relevant tool isn't set up, autotype silently fails and the reason
+shows up in the tray tooltip — clipboard and the history window are
+unaffected either way.
 
 ## Development
 

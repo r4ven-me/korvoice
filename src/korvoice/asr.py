@@ -100,6 +100,22 @@ class Engine(QObject):
         self._transcribe_worker: _TranscribeWorker | None = None
         self._pending_audio: np.ndarray | None = None
 
+    def preload(self) -> None:
+        """Warms the model in the background right after the daemon
+        starts (see app.py's KorvoiceApp.__init__), so the first real
+        hotkey press doesn't also have to eat the ~3-5s cold load (torch
+        import + weights) on top of recording — confirmed that cost is
+        real by timing load_model() directly against the cached weights
+        on this project's dev host."""
+        model_name = str(self.config.get("model"))
+        device = str(self.config.get("device"))
+        key = (model_name, device)
+        if self._model is not None and self._model_key == key:
+            return
+        if self._load_worker is not None and self._load_worker.isRunning():
+            return
+        self._start_load(model_name, device, key)
+
     def transcribe(self, audio: np.ndarray) -> None:
         if audio.size == 0:
             return
@@ -111,6 +127,11 @@ class Engine(QObject):
             return
 
         self._pending_audio = audio
+        if self._load_worker is not None and self._load_worker.isRunning():
+            return  # preload() (or an earlier transcribe()) already started this same load
+        self._start_load(model_name, device, key)
+
+    def _start_load(self, model_name: str, device: str, key: tuple[str, str]) -> None:
         self.status_changed.emit("loading")
         self._load_worker = _ModelLoadWorker(model_name, device)
         self._load_worker.loaded.connect(lambda model: self._on_loaded(model, key))

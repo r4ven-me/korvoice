@@ -33,6 +33,24 @@ MODE_CHOICES = [
     ("toggle", "Toggle (press to start/stop)"),
 ]
 
+# X11 keysym names for the bare modifier keys, used as-is as the whole
+# hotkey string (no "+"-joined combination) — hotkeys.parse_sequence's
+# fallback already passes an unrecognised multi-character key name through
+# verbatim, and XStringToKeysym resolves "Control_R" etc. as a normal,
+# distinct keysym, so the X11/portal backends need no changes to support
+# these (see settings_dialog.py's "Hotkey type" selector, the only place
+# that actually offers them).
+SINGLE_KEY_CHOICES = [
+    ("Control_R", "Right Ctrl"),
+    ("Control_L", "Left Ctrl"),
+    ("Shift_R", "Right Shift"),
+    ("Shift_L", "Left Shift"),
+    ("Alt_R", "Right Alt"),
+    ("Alt_L", "Left Alt"),
+    ("Super_R", "Right Super"),
+    ("Super_L", "Left Super"),
+]
+
 GENERAL_DEFAULTS = {
     "theme": "system",          # system | nord-dark | nord-light
     # auto = follow the app's own theme; dark/light pin a specific icon
