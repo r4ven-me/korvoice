@@ -124,12 +124,23 @@ class SettingsDialog(QDialog):
         )
         form.addRow("Recording mode:", self.mode_combo)
 
-        hotkey_container = QVBoxLayout()
+        # Two alternative ways to set the hotkey, both always visible (one
+        # greys out rather than disappearing) — a lone modifier press (e.g.
+        # Right Ctrl) typed straight into "...or combination" below doesn't
+        # register at all (Qt's QKeySequenceEdit has no representation for
+        # "just a modifier, nothing else"), which used to silently save an
+        # *empty* hotkey with no feedback. "Single key" is the explicit,
+        # working way to bind one — see _save()'s guard against saving
+        # nothing at all.
         self.hotkey_type_combo = QComboBox()
-        self.hotkey_type_combo.addItem("Custom combination…", "")
+        self.hotkey_type_combo.addItem("Use the combination below", "")
         for value, label in SINGLE_KEY_CHOICES:
             self.hotkey_type_combo.addItem(label, value)
-        hotkey_container.addWidget(self.hotkey_type_combo)
+        self.hotkey_type_combo.setToolTip(
+            "A lone modifier key (Ctrl/Shift/Alt/Super) can't be captured by "
+            "pressing it into the combination field below — pick it here."
+        )
+        form.addRow("Single key:", self.hotkey_type_combo)
 
         self.hotkey_combo_row = QWidget()
         combo_row_layout = QHBoxLayout(self.hotkey_combo_row)
@@ -139,34 +150,36 @@ class SettingsDialog(QDialog):
         clear_hotkey = QPushButton("Clear")
         clear_hotkey.clicked.connect(self.hotkey_record.clear)
         combo_row_layout.addWidget(clear_hotkey)
-        hotkey_container.addWidget(self.hotkey_combo_row)
-        form.addRow("Record hotkey:", hotkey_container)
+        form.addRow("...or combination:", self.hotkey_combo_row)
 
         current_hotkey = self.config.hotkey("record")
         single_key_index = self.hotkey_type_combo.findData(current_hotkey)
         if single_key_index > 0:
             self.hotkey_type_combo.setCurrentIndex(single_key_index)
-        self.hotkey_combo_row.setVisible(single_key_index <= 0)
+        self.hotkey_combo_row.setEnabled(single_key_index <= 0)
         self.hotkey_type_combo.currentIndexChanged.connect(self._hotkey_type_changed)
 
         self.autostart = QCheckBox("Start at login")
         self.autostart.setChecked(AUTOSTART_FILE.exists())
         form.addRow("", self.autostart)
 
-        form.addRow("", QLabel(
+        hotkey_note = QLabel(
             "<i>X11: the key is grabbed by the application directly — a single "
-            "modifier (e.g. Right Ctrl) works the same way as a combination.<br>"
+            "modifier works the same way as a combination.<br>"
             "Wayland: the system GlobalShortcuts portal is used — the "
             "compositor may show a confirmation dialog, and a single-modifier "
             "hotkey is best-effort (not every compositor supports it).</i>"
-        ))
+        )
+        hotkey_note.setWordWrap(True)
+        form.addRow("", hotkey_note)
 
-        settings_path = f"Settings file: {self.config.file_path()}"
-        form.addRow("", QLabel(f"<i>{settings_path}</i>"))
+        settings_path_label = QLabel(f"<i>Settings file: {self.config.file_path()}</i>")
+        settings_path_label.setWordWrap(True)
+        form.addRow("", settings_path_label)
         return page
 
     def _hotkey_type_changed(self, _index: int) -> None:
-        self.hotkey_combo_row.setVisible(not self.hotkey_type_combo.currentData())
+        self.hotkey_combo_row.setEnabled(not self.hotkey_type_combo.currentData())
 
     # -- "Output" tab ------------------------------------------------------------
 
@@ -235,16 +248,32 @@ class SettingsDialog(QDialog):
         self.input_device_combo.setCurrentIndex(max(0, device_idx))
         form.addRow("Microphone:", self.input_device_combo)
 
-        form.addRow("", QLabel(
-            "<i>The model is downloaded on first use (~1 GB, cached in "
-            "~/.cache/gigaam) and reloaded only if this tab's settings "
-            "change.</i>"
-        ))
+        model_note = QLabel(
+            "<i>The model (~1 GB, cached in ~/.cache/gigaam) starts loading in "
+            "the background as soon as korvoice starts, not on first use — "
+            "and reloads only if this tab's settings change.</i>"
+        )
+        model_note.setWordWrap(True)
+        form.addRow("", model_note)
         return page
 
     # -- saving ---------------------------------------------------------------
 
     def _save(self) -> None:
+        single_key = self.hotkey_type_combo.currentData()
+        sequence = single_key or self.hotkey_record.keySequence().toString(_KEY_FMT)
+        if not sequence:
+            # A lone modifier tap into "...or combination" produces an
+            # empty QKeySequence — used to save silently as no hotkey at
+            # all, with zero feedback, breaking recording entirely.
+            proceed = QMessageBox.question(
+                self, "korvoice",
+                "No hotkey is set — recording would only start from the "
+                "tray menu (or its left-click). Save without a hotkey?",
+            ) == QMessageBox.StandardButton.Yes
+            if not proceed:
+                return
+
         self.config.set("theme", self.theme_combo.currentData())
         self.config.set("tray_icon", self.tray_icon_combo.currentData())
         self.config.set("mode", self.mode_combo.currentData())
@@ -255,8 +284,6 @@ class SettingsDialog(QDialog):
         self.config.set("device", self.device_combo.currentData())
         self.config.set("chunk_max_seconds", self.chunk_seconds.value())
         self.config.set("input_device", self.input_device_combo.currentData())
-        single_key = self.hotkey_type_combo.currentData()
-        sequence = single_key or self.hotkey_record.keySequence().toString(_KEY_FMT)
         self.config.set_hotkey("record", sequence)
 
         try:

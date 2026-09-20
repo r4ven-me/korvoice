@@ -15,11 +15,15 @@ CONFIG_FILE = CONFIG_DIR / "config.yaml"
 # https://github.com/salute-developers/GigaAM — v3_e2e_ctc is the default:
 # CTC for speed, e2e because raw CTC output has no punctuation or capital
 # letters at all, which reads poorly once dictated into a text field.
+#
+# Labels kept short on purpose: a QComboBox sizes itself to its widest
+# item by default, and a long label here was the main reason the settings
+# dialog couldn't be shrunk smaller than its initial size.
 MODEL_CHOICES = [
-    ("v3_e2e_ctc", "v3 CTC + punctuation (default, fastest with punctuation)"),
-    ("v3_e2e_rnnt", "v3 RNNT + punctuation (more accurate, slower)"),
-    ("v3_ctc", "v3 CTC, no punctuation (fastest)"),
-    ("v3_rnnt", "v3 RNNT, no punctuation"),
+    ("v3_e2e_ctc", "v3 CTC + punctuation (default)"),
+    ("v3_e2e_rnnt", "v3 RNNT + punctuation (more accurate)"),
+    ("v3_ctc", "v3 CTC (no punctuation)"),
+    ("v3_rnnt", "v3 RNNT (no punctuation)"),
 ]
 
 DEVICE_CHOICES = [

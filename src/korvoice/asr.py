@@ -8,6 +8,7 @@ QThreads — neither should block the tray/hotkey event loop.
 from __future__ import annotations
 
 import logging
+import os
 import tempfile
 from pathlib import Path
 
@@ -18,6 +19,37 @@ from .audio import split_on_silence, write_wav
 from .config import Config
 
 log = logging.getLogger(__name__)
+
+_threads_configured = False
+
+
+def _configure_torch_threads() -> None:
+    """Caps torch's CPU thread pool before the first model load.
+
+    torch defaults to using half the logical CPUs (24 threads on this
+    project's 48-thread dev host) — confirmed live that this pegs enough
+    cores during RNNT inference to make the *entire desktop* stutter, not
+    just korvoice, since the compositor has to fight for CPU time too.
+    Benchmarked 4 vs. the 24-thread default on the same real audio clip:
+    0.45-0.48s vs. 0.39-0.42s — a ~0.05-0.08s difference, i.e. free to give
+    up for a background dictation tool that shouldn't be able to make the
+    rest of the machine unusable. Runs once per process (set_num_interop_
+    threads raises if called again after any interop work has already
+    started, e.g. from an earlier model load in the same run)."""
+    global _threads_configured
+    if _threads_configured:
+        return
+    _threads_configured = True
+    try:
+        import torch
+    except ImportError:
+        return
+    threads = max(1, min(4, (os.cpu_count() or 4) // 2))
+    torch.set_num_threads(threads)
+    try:
+        torch.set_num_interop_threads(max(1, threads // 2))
+    except RuntimeError:
+        pass  # interop parallel work already started elsewhere — harmless to skip
 
 
 class _ModelLoadWorker(QThread):
@@ -30,6 +62,7 @@ class _ModelLoadWorker(QThread):
         self.device = device
 
     def run(self) -> None:
+        _configure_torch_threads()
         try:
             import gigaam
         except ImportError as exc:
