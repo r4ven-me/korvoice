@@ -1,13 +1,24 @@
 """Global hotkey inside the application, no external tools.
 
-X11: XGrabKey via ctypes (libX11) + a dedicated X event reading thread.
-Wayland: XDG Desktop Portal (org.freedesktop.portal.GlobalShortcuts) via
-QtDBus — the compositor itself shows the binding confirmation dialog.
+X11: XGrabKey via ctypes (libX11) + a dedicated X event reading thread —
+except a bare modifier key (Control_R and the like, see
+config.SINGLE_KEY_CHOICES), which is tracked by polling XQueryKeymap
+instead: confirmed live that XGrabKey on a modifier keycode delivers its
+KeyPress but never delivers the matching KeyRelease at all, a quirk of the
+X11 core protocol around grabbing modifier keycodes specifically, not
+something fixable in the press/release matching logic. Wayland: XDG
+Desktop Portal (org.freedesktop.portal.GlobalShortcuts) via QtDBus — the
+compositor itself shows the binding confirmation dialog.
 
 Adapted from kortalk's hotkeys.py (~/Cloud/Projects/public/kortalk), with
 one addition: korvoice's push-to-talk mode needs to know when the key is
 *released*, not just pressed, so both backends here report press AND
-release (kortalk only ever needed "activated", i.e. press).
+release (kortalk only ever needed "activated", i.e. press). That in turn
+surfaced a second issue kortalk never hit either: X11 key auto-repeat
+sends a synthetic KeyRelease immediately before every repeated KeyPress
+while a key is held, which read as the hotkey being released and
+re-pressed dozens of times over one real hold — see
+XkbSetDetectableAutoRepeat and should_emit_key_event below.
 
 If no backend is available the application keeps working — the tray menu
 offers "Start recording" as a fallback (see app.py).
@@ -29,6 +40,14 @@ log = logging.getLogger(__name__)
 X11_MODMASK = {"ctrl": 1 << 2, "shift": 1 << 0, "alt": 1 << 3, "meta": 1 << 6}
 _NUMLOCK, _CAPSLOCK = 1 << 4, 1 << 1  # Mod2Mask, LockMask
 _RELEVANT_MODS = sum(X11_MODMASK.values())
+
+# A bare modifier used as the whole hotkey (config.SINGLE_KEY_CHOICES) is
+# tracked by polling XQueryKeymap instead of XGrabKey — see
+# _X11HotkeyThread.run()'s "polled" branch for why.
+_MODIFIER_KEYSYM_NAMES = {
+    "Control_L", "Control_R", "Shift_L", "Shift_R",
+    "Alt_L", "Alt_R", "Super_L", "Super_R",
+}
 
 # Qt key names -> X11 keysym names (XStringToKeysym)
 _KEYSYM_NAMES = {
@@ -85,6 +104,30 @@ def to_portal_trigger(sequence: str) -> str:
     return "+".join(mods + [key.lower() if len(key) == 1 else key])
 
 
+def should_emit_key_event(key: object, is_press: bool, held: set) -> bool:
+    """Backstop against X11 key auto-repeat, alongside
+    XkbSetDetectableAutoRepeat in _X11HotkeyThread.run() (belt and
+    suspenders: that call should already stop the server from re-sending
+    KeyPress/KeyRelease pairs while a key auto-repeats, this just also
+    drops anything that slips through). `held` is mutated in place —
+    tracks which grabbed keys are currently down. A press for a key
+    that's already in `held` is a repeat, not a new press: dropped
+    (returns False) instead of re-triggering push-to-talk's start.
+
+    A push-to-talk hold without this fired start/stop/transcribe dozens
+    of times over one held key (confirmed live) — each repeated KeyPress
+    arrived with a synthetic KeyRelease immediately before it, and
+    without deduplication every one of those pairs looked like a
+    legitimate release-then-repress."""
+    if is_press:
+        if key in held:
+            return False
+        held.add(key)
+    else:
+        held.discard(key)
+    return True
+
+
 # -- X11 backend --------------------------------------------------------------
 
 class _X11HotkeyThread(QThread):
@@ -128,6 +171,7 @@ class _X11HotkeyThread(QThread):
         xlib.XPending.restype = ctypes.c_int
         xlib.XSync.argtypes = [ctypes.c_void_p, ctypes.c_int]
         xlib.XCloseDisplay.argtypes = [ctypes.c_void_p]
+        xlib.XQueryKeymap.argtypes = [ctypes.c_void_p, ctypes.c_char_p]
 
         # A combination taken by another client yields BadAccess; the default
         # Xlib handler kills the process — install a silent one (Xlib only,
@@ -142,6 +186,25 @@ class _X11HotkeyThread(QThread):
             self.failed = [action for _m, _k, action in self._bindings]
             return
         root = xlib.XDefaultRootWindow(display)
+
+        # Without this, holding a grabbed key down makes X11's keyboard
+        # auto-repeat synthesize a KeyRelease immediately before every
+        # repeated KeyPress — confirmed live: push-to-talk with a held
+        # combination fired start/stop/transcribe dozens of times over the
+        # hold (visible as the tray icon and text cursor flickering, no
+        # usable audio ever captured, and — since each cycle spins up a
+        # real torch inference call — the burst of back-to-back
+        # transcriptions was enough to make the whole desktop stutter for
+        # the entire time the key was held). XkbSetDetectableAutoRepeat
+        # makes the server send exactly one KeyRelease, on the actual
+        # physical release, regardless of how long the key auto-repeats —
+        # this is what mainstream toolkits (Qt/GTK) already do on their
+        # own xcb connection, which is a separate connection from this
+        # thread's own raw Xlib one, so it has to be requested here too.
+        xlib.XkbSetDetectableAutoRepeat.argtypes = [
+            ctypes.c_void_p, ctypes.c_int, ctypes.POINTER(ctypes.c_int)]
+        xlib.XkbSetDetectableAutoRepeat.restype = ctypes.c_int
+        xlib.XkbSetDetectableAutoRepeat(display, 1, None)
 
         class XKeyEvent(ctypes.Structure):
             _fields_ = [
@@ -163,11 +226,26 @@ class _X11HotkeyThread(QThread):
 
         GRAB_MODE_ASYNC, KEY_PRESS, KEY_RELEASE = 1, 2, 3
         registered: dict[tuple[int, int], str] = {}  # (keycode, mods) -> action
+        # (keycode, action) for a bare modifier used as the whole hotkey —
+        # tracked by polling instead of XGrabKey. Confirmed live: grabbing
+        # a modifier keycode itself delivers its KeyPress fine but *never*
+        # delivers the matching KeyRelease at all (reproduced directly —
+        # push-to-talk recording started and then simply never stopped,
+        # confirmed still actively capturing a full second-plus later).
+        # This is a known-quirky corner of the X11 core protocol around
+        # grabbing modifier keycodes, not a bug in the press/release
+        # matching above — XQueryKeymap sidesteps grabbing for this one
+        # case entirely, just sampling whether the key is currently down.
+        polled: list[tuple[int, str]] = []
         for mods, keysym_name, action in self._bindings:
             keysym = xlib.XStringToKeysym(keysym_name.encode())
             keycode = xlib.XKeysymToKeycode(display, keysym) if keysym else 0
             if not keycode:
                 self.failed.append(action)
+                continue
+            if mods == 0 and keysym_name in _MODIFIER_KEYSYM_NAMES:
+                polled.append((keycode, action))
+                self.grabbed.append(action)
                 continue
             # grab all NumLock/CapsLock combinations
             for extra in (0, _NUMLOCK, _CAPSLOCK, _NUMLOCK | _CAPSLOCK):
@@ -179,6 +257,10 @@ class _X11HotkeyThread(QThread):
         log.info("X11 hotkeys: grabbed %s%s", self.grabbed,
                  f", failed {self.failed}" if self.failed else "")
 
+        held: set[tuple[int, int]] = set()  # see should_emit_key_event
+        polled_down: dict[int, bool] = dict.fromkeys((kc for kc, _a in polled), False)
+        keymap_buf = ctypes.create_string_buffer(32)
+
         event = XEvent()
         while not self._stop:
             while xlib.XPending(display):
@@ -186,8 +268,19 @@ class _X11HotkeyThread(QThread):
                 if event.type in (KEY_PRESS, KEY_RELEASE):
                     key = (event.xkey.keycode, event.xkey.state & _RELEVANT_MODS)
                     action = registered.get(key)
-                    if action:
-                        self.activated.emit(action, event.type == KEY_PRESS)
+                    if not action:
+                        continue
+                    is_press = event.type == KEY_PRESS
+                    if should_emit_key_event(key, is_press, held):
+                        self.activated.emit(action, is_press)
+            if polled:
+                xlib.XQueryKeymap(display, keymap_buf)
+                raw = keymap_buf.raw
+                for keycode, action in polled:
+                    is_down = bool(raw[keycode // 8] & (1 << (keycode % 8)))
+                    if is_down != polled_down[keycode]:
+                        polled_down[keycode] = is_down
+                        self.activated.emit(action, is_down)
             self.msleep(30)
 
         for (keycode, mods), _action in registered.items():

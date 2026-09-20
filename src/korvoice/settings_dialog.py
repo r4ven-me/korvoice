@@ -164,8 +164,10 @@ class SettingsDialog(QDialog):
         form.addRow("", self.autostart)
 
         hotkey_note = QLabel(
-            "<i>X11: the key is grabbed by the application directly — a single "
-            "modifier works the same way as a combination.<br>"
+            "<i>X11: a combination is grabbed by the application directly; a "
+            "single key is instead detected by watching keyboard state "
+            "(X11 doesn't reliably deliver a release for a grabbed modifier "
+            "key on its own).<br>"
             "Wayland: the system GlobalShortcuts portal is used — the "
             "compositor may show a confirmation dialog, and a single-modifier "
             "hotkey is best-effort (not every compositor supports it).</i>"

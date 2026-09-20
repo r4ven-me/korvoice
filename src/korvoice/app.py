@@ -402,6 +402,7 @@ class KorvoiceApp:
     def _hotkey_activated(self, action: str, is_press: bool) -> None:
         if action != _RECORD_ACTION:
             return
+        log.debug("hotkey %s: %s", action, "press" if is_press else "release")
         mode = str(self.config.get("mode"))
         if mode == "push_to_talk":
             if is_press:
