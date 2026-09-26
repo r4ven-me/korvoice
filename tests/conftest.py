@@ -24,6 +24,25 @@ def config(config_dir):
 
 
 @pytest.fixture(autouse=True)
+def _release_python_clipboard_data():
+    """Leaves only C++-created clipboard data behind after each test.
+
+    Under QT_QPA_PLATFORM=offscreen the clipboard contents live in a Qt
+    global static destroyed by exit() — after Python has finalized. A
+    QMimeData constructed from Python (the "secret" hint, a restored
+    snapshot) calls back into shiboken from its destructor and segfaults
+    the process there, after every test has passed (seen in CI, and
+    locally under CPU load). Real xcb/wayland clipboards are owned by the
+    platform integration and torn down earlier, so the app is unaffected.
+    """
+    yield
+    from PySide6.QtGui import QGuiApplication
+
+    if QGuiApplication.instance() is not None and QGuiApplication.clipboard() is not None:
+        QGuiApplication.clipboard().setText("")
+
+
+@pytest.fixture(autouse=True)
 def _isolate_autostart(tmp_path, monkeypatch):
     """Settings/app must not touch the real ~/.config/autostart,
     ~/.local/share/applications or ~/.local/share/icons."""

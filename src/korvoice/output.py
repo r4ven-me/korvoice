@@ -179,7 +179,9 @@ class OutputDispatcher(QObject):
             # the temporary clipboard contents.  Never overwrite a value the
             # user copied while autotype was running.
             delay = _RESTORE_DELAY_MS["wayland" if _is_wayland() else "x11"]
-            QTimer.singleShot(delay, lambda: self._restore_clipboard(inserted, generation))
+            # `self` as the timer's context: Qt drops the pending call if the
+            # dispatcher is destroyed first, instead of calling into it.
+            QTimer.singleShot(delay, self, lambda: self._restore_clipboard(inserted, generation))
 
     def _restore_clipboard(self, inserted: str, generation: int) -> None:
         if generation != self._clipboard_generation:
@@ -191,6 +193,14 @@ class OutputDispatcher(QObject):
         backend = self._clipboard_backend()
         if backend.text() == inserted:
             backend.restore(original)
+
+    def shutdown(self, timeout_ms: int = (_AUTOTYPE_TIMEOUT + 1) * 1000) -> None:
+        """Waits for running autotype subprocesses before the dispatcher
+        goes away — destroying a QThread that is still running crashes the
+        process. Bounded by the subprocess timeout, so it can't hang."""
+        for worker in list(self._autotype_workers):
+            worker.wait(timeout_ms)
+        self._autotype_workers.clear()
 
     def _forget_worker(self, worker: _AutotypeWorker) -> None:
         if worker in self._autotype_workers:
