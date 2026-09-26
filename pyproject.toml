@@ -15,7 +15,6 @@ keywords = ["speech-recognition", "asr", "gigaam", "voice-input", "dictation", "
 classifiers = [
     "Environment :: X11 Applications :: Qt",
     "Intended Audience :: End Users/Desktop",
-
     "Operating System :: POSIX :: Linux",
     "Programming Language :: Python :: 3",
     "Topic :: Multimedia :: Sound/Audio :: Speech",
@@ -31,10 +30,8 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-# No mypy: per this author's convention, strict typechecking is for
-# server/backend projects — optional for a small GUI utility like this one
-# (see ~/Cloud/Projects/template/skeletons/python/CLAUDE.md §1), and the
-# reference project this one is patterned after (kortalk) skips it too.
+# No mypy: strict typechecking is optional for a small GUI utility like this
+# one (kortalk, the project korvoice is patterned after, skips it too).
 dev = ["pytest>=8.2,<9", "pytest-qt>=4", "ruff>=0.5,<1"]
 
 # Presentation convention: keep all four public project contacts together

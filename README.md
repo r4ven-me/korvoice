@@ -22,13 +22,29 @@ history window. Everything runs on-device; nothing is sent anywhere.
 - **Tray + Nord GUI settings** — system / Nord dark / Nord light theme,
   same visual language across the settings dialog and history window.
 - **X11 and Wayland** — global hotkey via direct `XGrabKey` on X11, the
-  `GlobalShortcuts` portal on Wayland. Autotype shells out to `xdotool`
-  (X11) or `ydotool` (Wayland) — see Configuration below — clipboard and
-  the history window always work regardless of session type or whether
-  either tool is installed.
+  `GlobalShortcuts` portal on Wayland. Autotype pastes with `xdotool` (X11)
+  or `ydotool` + `wl-clipboard` (Wayland) — see Autotype below — while the
+  history window works regardless of session type or installed tools.
+- **Clipboard-history friendly** — text that autotype only puts in the
+  clipboard temporarily is marked so that clipboard managers skip it
+  (configurable, see Clipboard managers below).
 - **Autostart** — optional login autostart entry, toggled from Settings.
 
 ## Quick start
+
+System packages first (Debian/Ubuntu/Mint names; use your distro's
+equivalents):
+
+```bash
+# required: audio capture, audio decoding for GigaAM, Qt's X11 plugin
+sudo apt install libportaudio2 ffmpeg libxcb-cursor0
+# autotype on X11
+sudo apt install xdotool
+# autotype on Wayland (plus a running ydotoold, see Autotype below)
+sudo apt install wl-clipboard ydotool
+```
+
+Then korvoice itself:
 
 ```bash
 pipx install korvoice
@@ -75,6 +91,7 @@ Settings (`~/.config/korvoice/config.yaml`, YAML, written on every change):
 | Microphone | any input device PortAudio reports | system default |
 | Output: keep in clipboard / autotype / history window | on/off, independently | all on |
 | Text ending | nothing / space / new line / blank line / custom text | nothing |
+| Hide from clipboard history | only temporary paste text / all recognized text / nothing | only temporary paste text |
 | Keep history between restarts | on/off (last 1000 entries) | off |
 | Autostart at login | on/off | off |
 
@@ -96,22 +113,48 @@ scope for this project for now.
 
 ### Autotype
 
-Both backends are external system tools, not pip dependencies:
+Autotype puts the text in the clipboard and sends a single `Ctrl+V` instead
+of typing it key by key: `xdotool type` handles Cyrillic by repeatedly
+changing the X11 keymap and can freeze the whole desktop, and `ydotool type`
+only knows the US layout, so it can't type Cyrillic at all. Both backends are
+external system tools, not pip dependencies:
 
-- **X11**: [`xdotool`](https://github.com/jordansissel/xdotool)
-  (`sudo apt install xdotool` or your distro's equivalent). Korvoice puts
-  the text in Qt's clipboard and asks `xdotool` to send one `Ctrl+V` rather
-  than emulating every character: `xdotool type` repeatedly changes the X11
-  keymap for Cyrillic and can freeze the whole desktop. Therefore X11
-  autotype uses the clipboard temporarily; when “keep in clipboard” is off,
-  the previous MIME contents are restored after pasting (clipboard-history
-  managers may still record the temporary text).
-- **Wayland**: [`ydotool`](https://github.com/ktr0731/ydotool), whose
-  daemon (`ydotoold`) needs to be running with access to `/dev/uinput`.
+- **X11**: [`xdotool`](https://github.com/jordansissel/xdotool).
+- **Wayland**: [`wl-clipboard`](https://github.com/bugaevc/wl-clipboard)
+  (`wl-copy`/`wl-paste`) and [`ydotool`](https://github.com/ReimuNotMoe/ydotool),
+  whose daemon (`ydotoold`) needs to be running with access to
+  `/dev/uinput`. Korvoice detects whether it's ydotool 0.1.x (what
+  Debian/Ubuntu ship) or 1.x and uses the matching `key` syntax.
 
-If the relevant tool isn't set up, autotype silently fails and the reason
-shows up in the tray tooltip — clipboard and the history window are
-unaffected either way.
+When “keep in clipboard” is off, the previous clipboard contents come back
+right after the paste (on Wayland, one format of them — text preferred —
+since `wl-copy` offers a single type).
+
+Terminals usually paste with `Ctrl+Shift+V`, not `Ctrl+V`, so autotype into
+a terminal may do nothing — use the clipboard output there.
+
+If the relevant tool isn't set up, autotype fails and the reason shows up in
+the tray tooltip until the next successful autotype — clipboard and the
+history window are unaffected either way.
+
+### Clipboard managers
+
+Because autotype goes through the clipboard, a clipboard manager would see
+every dictated phrase, even with “keep in clipboard” off. Korvoice therefore
+marks clipboard text with `x-kde-passwordManagerHint: secret` — the same hint
+password managers such as KeePassXC use — which Klipper, CopyQ, cliphist and
+other managers that honour it take as “don't record this”. Settings → Output
+→ “Hide from clipboard history”:
+
+- **Only temporary paste text** (default) — hide the text autotype puts in
+  the clipboard just to paste it; text you chose to keep in the clipboard is
+  recorded as usual.
+- **All recognized text** — also hide the kept text.
+- **Nothing** — mark nothing (the old behaviour).
+
+Managers that ignore the hint still record the text; the only alternative is
+turning autotype off. The hint is X11-only for now: `wl-copy` can offer just
+one MIME type, so on Wayland the text can't carry it.
 
 ## Development
 
@@ -120,9 +163,7 @@ make install
 make check     # lint + test
 ```
 
-No `make typecheck`/mypy here — see the comment in `pyproject.toml`'s
-`[project.optional-dependencies]`: strict typechecking is this author's
-convention for server/backend projects, optional for a small GUI utility.
+There is no mypy/typecheck step (see the comment in `pyproject.toml`).
 
 ### Publishing to PyPI
 
@@ -140,9 +181,6 @@ GigaAM Git installation remains a documented second step because PyPI rejects
 direct Git dependencies and its `gigaam` 0.1.0 package lacks the v3/e2e models.
 
 ## Links
-
-Project presentation convention: whenever project contacts are listed, keep
-all four links together:
 
 - Website: [r4ven.me](https://r4ven.me)
 - GitHub: [github.com/r4ven-me/korvoice](https://github.com/r4ven-me/korvoice)

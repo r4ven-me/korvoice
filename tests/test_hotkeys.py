@@ -1,8 +1,12 @@
 import pytest
+from PySide6.QtCore import QObject
 
 from korvoice.config import SINGLE_KEY_CHOICES
 from korvoice.hotkeys import (
     _MODIFIER_KEYSYM_NAMES,
+    GlobalHotkeys,
+    _PortalHotkeys,
+    next_portal_tokens,
     parse_sequence,
     should_emit_key_event,
     to_portal_trigger,
@@ -95,3 +99,81 @@ def test_every_single_key_choice_is_polled_not_grabbed():
     # KeyRelease for a bare modifier keycode (confirmed live).
     for value, _label in SINGLE_KEY_CHOICES:
         assert value in _MODIFIER_KEYSYM_NAMES
+
+
+def test_portal_tokens_are_unique_per_session():
+    first, second = next_portal_tokens(), next_portal_tokens()
+    assert len(set(first)) == 3
+    assert not set(first) & set(second)
+
+
+class _FakeBus:
+    def __init__(self):
+        self.disconnected = []
+
+    def disconnect(self, *args):
+        self.disconnected.append(args[3])
+        return True
+
+
+def _bare_portal(session_handle="/org/freedesktop/portal/desktop/session/1_2/mine"):
+    """A _PortalHotkeys past its D-Bus setup, without a real session bus."""
+    portal = _PortalHotkeys.__new__(_PortalHotkeys)
+    QObject.__init__(portal)
+    portal._bus = _FakeBus()
+    portal._request_path = "/org/freedesktop/portal/desktop/request/1_2/token"
+    portal._session_handle = session_handle
+    portal._closed = False
+    return portal
+
+
+class _Path:
+    def __init__(self, path):
+        self._path = path
+
+    def path(self):
+        return self._path
+
+
+def test_portal_ignores_other_sessions(qapp):
+    portal = _bare_portal()
+    events = []
+    portal.activated.connect(lambda action, press: events.append((action, press)))
+
+    portal._on_activated(_Path("/org/freedesktop/portal/desktop/session/1_2/other"),
+                         "record", 0, {})
+    portal._on_activated(_Path(portal._session_handle), "record", 0, {})
+    portal._on_deactivated(portal._session_handle, "record", 0, {})
+
+    assert events == [("record", True), ("record", False)]
+
+
+def test_closed_portal_stops_emitting_and_disconnects(qapp):
+    portal = _bare_portal(session_handle="")  # session never created: no Close call
+    events = []
+    portal.activated.connect(lambda action, press: events.append((action, press)))
+
+    portal.close()
+    portal._on_activated(portal._session_handle, "record", 0, {})
+
+    assert events == []
+    assert {"Response", "Activated", "Deactivated"} <= set(portal._bus.disconnected)
+
+
+def test_global_hotkeys_stop_closes_portal_session(qapp):
+    class FakePortal:
+        closed = False
+
+        def close(self):
+            self.closed = True
+
+    hotkeys = GlobalHotkeys()
+    portal = FakePortal()
+    hotkeys._portal = portal
+    hotkeys.backend = "portal"
+
+    hotkeys.stop()
+
+    assert portal.closed
+    assert hotkeys._portal is None
+    assert hotkeys.backend == "none"

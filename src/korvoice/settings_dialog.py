@@ -1,9 +1,10 @@
 """Settings dialog: General, Output, Model, About — same structure as
-kortalk's settings_dialog.py (~/Cloud/Projects/public/kortalk), trimmed to
-the fields korvoice actually has (no providers/prompts)."""
+kortalk's settings dialog, trimmed to the fields korvoice actually has (no
+providers/prompts)."""
 
 from __future__ import annotations
 
+import os
 import shutil
 import sys
 from pathlib import Path
@@ -42,6 +43,7 @@ from . import (
 )
 from .audio import list_input_devices
 from .config import (
+    CLIPBOARD_HISTORY_CHOICES,
     DEVICE_CHOICES,
     MODE_CHOICES,
     MODEL_CHOICES,
@@ -51,7 +53,10 @@ from .config import (
 )
 from .i18n import set_language, tr
 
-AUTOSTART_FILE = Path.home() / ".config" / "autostart" / "korvoice.desktop"
+AUTOSTART_FILE = (
+    Path(os.environ.get("XDG_CONFIG_HOME", str(Path.home() / ".config")))
+    / "autostart" / "korvoice.desktop"
+)
 
 # Exec must be an absolute path: with a pipx install ~/.local/bin may not be
 # in PATH yet when the session starts.
@@ -215,6 +220,18 @@ class SettingsDialog(QDialog):
                 ))
         layout.addWidget(self.output_clipboard)
 
+        hide_row = QHBoxLayout()
+        hide_row.addWidget(QLabel(tr("Hide from clipboard history:")))
+        self.clipboard_hide_combo = QComboBox()
+        for value, label in CLIPBOARD_HISTORY_CHOICES:
+            self.clipboard_hide_combo.addItem(tr(label), value)
+        hide_index = self.clipboard_hide_combo.findData(
+            str(self.config.get("clipboard_hide_history")))
+        self.clipboard_hide_combo.setCurrentIndex(max(0, hide_index))
+        self.clipboard_hide_combo.setToolTip(tr("Clipboard history note"))
+        hide_row.addWidget(self.clipboard_hide_combo, 1)
+        layout.addLayout(hide_row)
+
         self.output_autotype = QCheckBox(tr("Autotype into the focused window"))
         self.output_autotype.setChecked(bool(self.config.get("output_autotype")))
         self.output_autotype.setToolTip(tr("Autotype requirements"))
@@ -323,6 +340,7 @@ class SettingsDialog(QDialog):
         self.config.set("tray_icon", self.tray_icon_combo.currentData())
         self.config.set("mode", self.mode_combo.currentData())
         self.config.set("output_clipboard", self.output_clipboard.isChecked())
+        self.config.set("clipboard_hide_history", self.clipboard_hide_combo.currentData())
         self.config.set("output_autotype", self.output_autotype.isChecked())
         self.config.set("output_window", self.output_window.isChecked())
         self.config.set("history_persistent", self.history_persistent.isChecked())

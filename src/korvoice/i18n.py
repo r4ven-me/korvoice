@@ -10,6 +10,16 @@ import os
 
 _language_override = "system"
 
+# Long explanatory texts are looked up by a short id instead of their full
+# English wording; both languages therefore need an explicit entry.
+_EN = {
+    "X11 hotkey note": "<i>X11: the combination is grabbed by the app directly; a single key is detected from the keyboard state.<br>Wayland: the GlobalShortcuts system portal is used; the compositor may show a confirmation dialog, and single modifier keys are not supported by every compositor.</i>",
+    "Autotype requirements": "X11: requires xdotool.\nWayland: requires wl-clipboard, plus ydotool with a running ydotoold that has access to uinput.\nThe text is pasted with Ctrl+V — terminals usually need Ctrl+Shift+V, so autotype may not work there.\nIf autotype is unavailable, the reason appears in the tray tooltip; the clipboard and history keep working.",
+    "GigaAM chunk note": "GigaAM rejects audio longer than 25 seconds in one call — long recordings are split at the nearest pause. Keep some headroom below 25 seconds (default 20).",
+    "GigaAM model note": "<i>The model (~1 GB, cached in ~/.cache/gigaam) loads in the background right after korvoice starts, not on first use, and reloads in the background as soon as the model or device on this tab is changed.</i>",
+    "Clipboard history note": "Clipboard managers that honour the “secret” hint (Klipper, CopyQ, cliphist and others) skip text marked this way. Other managers may ignore it. Not available on Wayland: wl-copy can't attach the hint.",
+}
+
 _RU = {
     "Settings — korvoice": "Настройки — korvoice",
     "General": "Основные",
@@ -65,7 +75,12 @@ _RU = {
     "Blank line": "Пустая строка",
     "Custom…": "Свой вариант…",
     "Text appended verbatim": "Текст, добавляемый без изменений",
-    "Autotype requirements": "X11: требуется xdotool.\nWayland: требуется ydotool и запущенный ydotoold с доступом к uinput.\nЕсли автовставка недоступна, причина появится в подсказке трея; буфер обмена и история продолжат работать.",
+    "Autotype requirements": "X11: требуется xdotool.\nWayland: требуются wl-clipboard, а также ydotool и запущенный ydotoold с доступом к uinput.\nТекст вставляется через Ctrl+V — терминалам обычно нужен Ctrl+Shift+V, поэтому в них автовставка может не сработать.\nЕсли автовставка недоступна, причина появится в подсказке трея; буфер обмена и история продолжат работать.",
+    "Hide from clipboard history:": "Скрывать от истории буфера:",
+    "Only temporary paste text": "Только временный текст вставки",
+    "All recognized text": "Весь распознанный текст",
+    "Clipboard history note": "Менеджеры буфера обмена, учитывающие пометку «секретно» (Klipper, CopyQ, cliphist и другие), не сохраняют такой текст. Остальные могут её игнорировать. В Wayland недоступно: wl-copy не умеет добавлять пометку.",
+    "wl-copy not found — install wl-clipboard for autotype on Wayland": "wl-copy не найден — установите wl-clipboard для автовставки в Wayland",
     "Model:": "Модель:",
     "Inference device:": "Устройство вычислений:",
     "Auto (GPU if available, else CPU)": "Авто (GPU при наличии, иначе CPU)",
@@ -73,7 +88,7 @@ _RU = {
     "System default": "Системный по умолчанию",
     "Microphone:": "Микрофон:",
     "GigaAM chunk note": "GigaAM не принимает аудио длиннее 25 секунд за один вызов — длинные записи делятся по ближайшей паузе. Оставьте запас до 25 секунд (по умолчанию 20).",
-    "GigaAM model note": "<i>Модель (~1 ГБ, кешируется в ~/.cache/gigaam) загружается в фоне сразу после запуска korvoice, а не при первом использовании, и перезагружается только при изменении настроек этой вкладки.</i>",
+    "GigaAM model note": "<i>Модель (~1 ГБ, кешируется в ~/.cache/gigaam) загружается в фоне сразу после запуска korvoice, а не при первом использовании, и перезагружается в фоне сразу после смены модели или устройства на этой вкладке.</i>",
     "Mode": "Режим",
     "Push-to-talk": "Удержание клавиши",
     "Toggle": "Переключатель",
@@ -137,5 +152,6 @@ def current_language() -> str:
 
 
 def tr(text: str, **values: object) -> str:
-    translated = _RU.get(text, text) if current_language() == "ru" else text
+    table = _RU if current_language() == "ru" else _EN
+    translated = table.get(text, text)
     return translated.format(**values) if values else translated

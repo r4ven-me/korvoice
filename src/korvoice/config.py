@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import tempfile
 from pathlib import Path
 
 import yaml
@@ -44,6 +45,16 @@ OUTPUT_SUFFIX_CHOICES = [
     ("\n\n", "Blank line"),
 ]
 
+# Which clipboard writes carry the "x-kde-passwordManagerHint: secret" MIME
+# entry that clipboard managers (Klipper, CopyQ, cliphist, ...) use to skip
+# password-manager copies. "temporary" = only the text autotype puts in
+# the clipboard just to paste it and then restores the previous contents.
+CLIPBOARD_HISTORY_CHOICES = [
+    ("temporary", "Only temporary paste text"),
+    ("all", "All recognized text"),
+    ("none", "Nothing"),
+]
+
 # X11 keysym names for the bare modifier keys, used as-is as the whole
 # hotkey string (no "+"-joined combination) — hotkeys.parse_sequence's
 # fallback already passes an unrecognised multi-character key name through
@@ -81,6 +92,7 @@ GENERAL_DEFAULTS = {
     "output_autotype": True,
     "output_window": True,
     "output_suffix": "",       # appended after every recognized utterance
+    "clipboard_hide_history": "temporary",  # temporary | all | none
     "remove_fillers": False,    # remove standalone э / э-э / эм / м-м
     "history_persistent": False,
 }
@@ -98,22 +110,27 @@ class Config:
         self._data: dict = {}
         if CONFIG_FILE.exists():
             try:
-                self._data = yaml.safe_load(CONFIG_FILE.read_text(encoding="utf-8")) or {}
-            except yaml.YAMLError:
+                loaded = yaml.safe_load(CONFIG_FILE.read_text(encoding="utf-8"))
+            except (OSError, yaml.YAMLError):
                 # a broken file must not block startup — fall back to defaults
-                self._data = {}
+                loaded = None
+            self._data = loaded if isinstance(loaded, dict) else {}
         changed = self._ensure_defaults()
         if changed or not CONFIG_FILE.exists():
             self.save()
 
     def _ensure_defaults(self) -> bool:
         changed = False
-        general = self._data.setdefault("general", {})
+        for section in ("general", "hotkeys"):
+            if not isinstance(self._data.get(section), dict):
+                self._data[section] = {}
+                changed = True
+        general = self._data["general"]
         for key, value in GENERAL_DEFAULTS.items():
             if key not in general:
                 general[key] = value
                 changed = True
-        hotkeys = self._data.setdefault("hotkeys", {})
+        hotkeys = self._data["hotkeys"]
         for key, value in HOTKEY_DEFAULTS.items():
             if key not in hotkeys:
                 hotkeys[key] = value
@@ -150,15 +167,20 @@ class Config:
     # -- persistence ----------------------------------------------------------
 
     def save(self) -> None:
+        """Writes to a temporary file in the same directory and renames it
+        over the config, so a crash mid-write can't leave a truncated file
+        (which would silently reset every setting on the next start)."""
         CONFIG_DIR.mkdir(parents=True, exist_ok=True)
-        CONFIG_FILE.write_text(
-            yaml.safe_dump(self._data, allow_unicode=True, sort_keys=False),
-            encoding="utf-8",
-        )
+        content = yaml.safe_dump(self._data, allow_unicode=True, sort_keys=False)
+        fd, tmp_name = tempfile.mkstemp(prefix=".config-", suffix=".tmp", dir=CONFIG_DIR)
         try:
-            os.chmod(CONFIG_FILE, 0o600)
-        except OSError:
-            pass
+            with os.fdopen(fd, "w", encoding="utf-8") as tmp_file:
+                tmp_file.write(content)
+            os.chmod(tmp_name, 0o600)
+            os.replace(tmp_name, CONFIG_FILE)
+        except BaseException:
+            Path(tmp_name).unlink(missing_ok=True)
+            raise
 
     def file_path(self) -> str:
         return str(CONFIG_FILE)

@@ -158,3 +158,47 @@ def test_saving_empty_hotkey_proceeds_on_yes(config, qapp, monkeypatch):
     dialog._save()
 
     assert config.hotkey("record") == ""
+
+
+def test_clipboard_hide_history_defaults_to_temporary(config, qapp):
+    dialog = SettingsDialog(config)
+
+    assert dialog.clipboard_hide_combo.currentData() == "temporary"
+
+
+def test_saving_clipboard_hide_history_persists(config, qapp):
+    dialog = SettingsDialog(config)
+    dialog.clipboard_hide_combo.setCurrentIndex(dialog.clipboard_hide_combo.findData("all"))
+
+    dialog._save()
+
+    assert config.get("clipboard_hide_history") == "all"
+
+
+def test_english_notes_show_text_not_ids(config, qapp):
+    set_language("en")
+    try:
+        dialog = SettingsDialog(config)
+        texts = [label.text() for label in dialog.findChildren(QLabel)]
+        tooltips = [dialog.output_autotype.toolTip(), dialog.chunk_seconds.toolTip(),
+                    dialog.clipboard_hide_combo.toolTip()]
+    finally:
+        set_language("system")
+
+    ids = {"X11 hotkey note", "GigaAM model note", "GigaAM chunk note",
+           "Autotype requirements", "Clipboard history note"}
+    assert not ids & set(texts)
+    assert not ids & set(tooltips)
+    assert any("GlobalShortcuts" in text for text in texts)
+
+
+def test_autostart_file_follows_xdg_config_home(tmp_path, monkeypatch):
+    import importlib
+
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "xdg"))
+    module = importlib.reload(settings_dialog_mod)
+    try:
+        assert module.AUTOSTART_FILE == tmp_path / "xdg" / "autostart" / "korvoice.desktop"
+    finally:
+        monkeypatch.delenv("XDG_CONFIG_HOME")
+        importlib.reload(settings_dialog_mod)
