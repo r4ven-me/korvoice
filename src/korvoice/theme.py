@@ -323,10 +323,12 @@ def tray_icon_color(setting: str) -> QColor | None:
 
 
 def make_tray_icon(color: QColor | str | None = None, state: str = "idle") -> QIcon:
-    """Returns the supplied SVG in the tone best suited to the current theme.
+    """Returns a freshly rasterized icon suited to the current theme.
 
-    Recording and transcription retain their red/yellow state dots.  A
-    requested light color selects the n6 asset; a dark color selects n00.
+    Every state, including idle, is built as a new pixmap-backed QIcon. Some
+    system trays cache file-backed SVG icons and otherwise keep showing the
+    previous recording/transcribing dot after the application returned to
+    idle. Recording and transcription use red/yellow state dots.
     """
     if color is None:
         app = _app_instance()
@@ -335,22 +337,21 @@ def make_tray_icon(color: QColor | str | None = None, state: str = "idle") -> QI
     color = QColor(color)
     source = LIGHT_ICON if color.lightness() >= 128 else DARK_ICON
     base = QIcon(str(source))
-
-    if state not in _STATE_DOT_COLORS:
-        return base
+    dot_color = _STATE_DOT_COLORS.get(state)
 
     icon = QIcon()
     for size in (22, 24, 32, 48, 64, 128):
         pixmap = base.pixmap(size, size)
-        painter = QPainter(pixmap)
-        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-        dot_r = size * 0.16
-        painter.setPen(Qt.PenStyle.NoPen)
-        painter.setBrush(QColor(NORD[_STATE_DOT_COLORS[state]]))
-        painter.drawEllipse(
-            int(size - dot_r * 1.7), int(size - dot_r * 1.7),
-            int(dot_r * 1.6), int(dot_r * 1.6),
-        )
-        painter.end()
+        if dot_color is not None:
+            painter = QPainter(pixmap)
+            painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+            dot_r = size * 0.16
+            painter.setPen(Qt.PenStyle.NoPen)
+            painter.setBrush(QColor(NORD[dot_color]))
+            painter.drawEllipse(
+                int(size - dot_r * 1.7), int(size - dot_r * 1.7),
+                int(dot_r * 1.6), int(dot_r * 1.6),
+            )
+            painter.end()
         icon.addPixmap(pixmap)
     return icon

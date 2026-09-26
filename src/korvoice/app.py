@@ -479,8 +479,9 @@ class KorvoiceApp:
             self._update_tray_visuals()
 
     def _on_result(self, text: str) -> None:
-        log.debug("transcription finished in %.2fs: %r",
-                 time.monotonic() - self._transcribe_started_at, text)
+        elapsed = time.monotonic() - self._transcribe_started_at
+        log.info("transcription finished in %.2fs", elapsed)
+        log.debug("transcription result: %r", text)
         self.state = "idle"
         self._update_tray_visuals()
         if text:

@@ -38,6 +38,14 @@ def test_make_tray_icon_not_null(qapp):
     assert not icon.isNull()
 
 
+def test_idle_tray_icon_is_freshly_rasterized(qapp):
+    first = theme.make_tray_icon(QColor("#ffffff"), state="idle")
+    second = theme.make_tray_icon(QColor("#ffffff"), state="idle")
+
+    assert first.cacheKey() != second.cacheKey()
+    assert not first.pixmap(24, 24).isNull()
+
+
 def test_make_tray_icon_state_variants_not_null(qapp):
     for state in ("idle", "recording", "transcribing"):
         icon = theme.make_tray_icon(QColor("#ffffff"), state=state)
