@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "korvoice"
-version = "0.2.0"
+version = "0.2.1"
 description = "Push-to-talk / toggle Russian voice input for Linux, powered by the local GigaAM speech model — tray, Nord GUI, no cloud."
 readme = "README.md"
 license = "GPL-3.0-or-later"
