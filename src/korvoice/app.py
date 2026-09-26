@@ -189,7 +189,12 @@ def run_selftest(config: Config) -> int:
         import gigaam  # noqa: F401
         report("gigaam importable", True)
     except ImportError as exc:
-        report("gigaam importable", False, f"pip install failed or incomplete: {exc}")
+        report(
+            "gigaam importable",
+            False,
+            "install the current GigaAM GitHub version into the korvoice pipx "
+            f"environment (see README): {exc}",
+        )
 
     devices = list_input_devices()
     report(f"microphone input device(s) found: {len(devices)}", len(devices) > 0,

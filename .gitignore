@@ -6,6 +6,7 @@ __pycache__/
 .mypy_cache/
 .ruff_cache/
 .pytest_cache/
+uv.lock
 build/
 
 # Secrets / local overrides — never commit the real one

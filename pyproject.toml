@@ -1,5 +1,5 @@
 [build-system]
-requires = ["setuptools>=69", "wheel"]
+requires = ["setuptools>=77", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
@@ -7,14 +7,15 @@ name = "korvoice"
 version = "0.1.0"
 description = "Push-to-talk / toggle Russian voice input for Linux, powered by the local GigaAM speech model — tray, Nord GUI, no cloud."
 readme = "README.md"
-license = { text = "GPL-3.0-or-later" }
+license = "GPL-3.0-or-later"
+license-files = ["LICENSE"]
 requires-python = ">=3.10"
 authors = [{ name = "Ivan Cherniy" }]
 keywords = ["speech-recognition", "asr", "gigaam", "voice-input", "dictation", "tray", "qt", "russian"]
 classifiers = [
     "Environment :: X11 Applications :: Qt",
     "Intended Audience :: End Users/Desktop",
-    "License :: OSI Approved :: GNU General Public License v3 or later (GPLv3+)",
+
     "Operating System :: POSIX :: Linux",
     "Programming Language :: Python :: 3",
     "Topic :: Multimedia :: Sound/Audio :: Speech",
@@ -24,26 +25,9 @@ dependencies = [
     "PyYAML>=6.0",
     "numpy>=1.24",
     "sounddevice>=0.4",
-    # No pynput: tried it for X11 autotype, it raised InvalidCharacterException
-    # on Cyrillic text (X11 keymap-remap limits reached mid-string, confirmed
-    # against real Russian text) — autotype shells out to xdotool (X11) /
-    # ydotool (Wayland) instead, both external system tools, see README.
-    #
-    # PyPI's own "gigaam" (0.1.0) predates the v3/e2e model lines (punctuation
-    # + case restoration) korvoice defaults to — only the GitHub main branch
-    # has them. This is a direct-reference dependency, so korvoice itself
-    # can't be published to PyPI as-is (PyPI rejects direct references in
-    # uploaded metadata) — see README "Install" for the current git-based
-    # pipx command.
-    #
-    # The "torch" extra: GigaAM's own base install has no torch/torchaudio
-    # at all (bare `pip install gigaam` gets you neither — confirmed the
-    # hard way, `gigaam` imports but immediately fails on `torchaudio`
-    # missing). korvoice needing torch anyway, this is the extra to ask
-    # for, not a bare separate "torch" dependency of our own — one already
-    # tried, and conflicted with gigaam's own `torch>=2.6` floor (installed
-    # torch 2.5.1 quietly satisfied *our* looser pin but not gigaam's).
-    "gigaam[torch] @ git+https://github.com/salute-developers/GigaAM.git",
+    # GigaAM is deliberately installed in a documented second step. PyPI's
+    # gigaam 0.1.0 lacks the v3/e2e models korvoice uses, while PyPI rejects
+    # direct Git dependencies in uploaded metadata. See README "Install".
 ]
 
 [project.optional-dependencies]

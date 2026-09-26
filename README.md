@@ -31,11 +31,14 @@ history window. Everything runs on-device; nothing is sent anywhere.
 ## Quick start
 
 ```bash
-# CPU-only by default — the plain "torch" wheel from PyPI bundles ~1.5-2 GB
-# of CUDA libraries even without a GPU; --pip-args routes pip at a CPU-only
-# index instead. See "GPU acceleration" below if you have an NVIDIA card.
-pipx install "korvoice @ git+https://github.com/r4ven-me/korvoice" \
-  --pip-args="--extra-index-url https://download.pytorch.org/whl/cpu"
+pipx install korvoice
+
+# Required ASR backend. The GigaAM release currently on PyPI lacks the v3/e2e
+# models used by korvoice, so install its current GitHub version into the same
+# pipx environment. The extra index selects CPU-only PyTorch wheels.
+pipx runpip korvoice install \
+  --extra-index-url https://download.pytorch.org/whl/cpu \
+  "gigaam[torch] @ git+https://github.com/salute-developers/GigaAM.git"
 
 korvoice          # starts the tray daemon
 korvoice --check  # environment diagnostics (mic, ffmpeg, hotkey backend, gigaam)
@@ -77,10 +80,14 @@ Settings (`~/.config/korvoice/config.yaml`, YAML, written on every change):
 
 ### GPU acceleration
 
-NVIDIA (CUDA) works out of the box once a CUDA-enabled `torch` is
-installed — reinstall without the CPU-only `--pip-args` flag above, or
-`pipx runpip korvoice install torch` into the existing venv. Set
-Settings → Model → Inference device to `cuda` (or leave `auto`).
+For NVIDIA CUDA, omit the PyTorch CPU index when installing GigaAM:
+
+```bash
+pipx runpip korvoice install \
+  "gigaam[torch] @ git+https://github.com/salute-developers/GigaAM.git"
+```
+
+Then set Settings → Model → Inference device to `cuda` (or leave `auto`).
 
 AMD is **not supported**: the RX580 and similar Polaris-generation cards
 (`gfx803`) were dropped from official ROCm support in ROCm 6.0+, and the
@@ -117,10 +124,17 @@ No `make typecheck`/mypy here — see the comment in `pyproject.toml`'s
 `[project.optional-dependencies]`: strict typechecking is this author's
 convention for server/backend projects, optional for a small GUI utility.
 
-No `.github/workflows/` yet either: korvoice depends on GigaAM via a
-`git+https` direct reference (the only place the `v3_e2e_ctc` model line
-currently lives — see `pyproject.toml`), which PyPI rejects in uploaded
-package metadata, so there's no PyPI project to publish to yet.
+### Publishing to PyPI
+
+`.github/workflows/publish.yml` tests and builds the package on pull requests,
+`master` pushes and manual runs. Pushing a tag matching the version in
+`pyproject.toml` (for example, `v0.1.0`) additionally publishes the wheel and source distribution to PyPI
+using trusted publishing — no API token is stored in GitHub.
+
+Configure a PyPI trusted publisher with owner `r4ven-me`, repository
+`korvoice`, workflow `publish.yml`, and environment `pypi`. The required
+GigaAM Git installation remains a documented second step because PyPI rejects
+direct Git dependencies and its `gigaam` 0.1.0 package lacks the v3/e2e models.
 
 ## Links
 

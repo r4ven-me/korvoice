@@ -1,10 +1,9 @@
 # Local release automation for korvoice.
 #
-# No .github/workflows/publish.yml yet: korvoice depends on GigaAM via a
-# git+https direct reference (see pyproject.toml), which PyPI rejects in
-# uploaded package metadata — so there's no PyPI project to trigger a
-# trusted-publish release against yet. `release` here only tags and pushes;
-# revisit once the GigaAM dependency story allows a real PyPI publish.
+# Pushing the version tag created by `release` triggers
+# .github/workflows/publish.yml, which tests, builds and publishes to PyPI
+# through trusted publishing. Configure the `pypi` GitHub environment and
+# matching PyPI trusted publisher before the first release.
 #
 # No typecheck target: per this author's convention, strict mypy is for
 # server/backend projects, optional for a small GUI utility like this one —
@@ -18,13 +17,15 @@
 #                                        # are uncommitted changes to commit)
 #   make version                        # print the tag this would create
 
-# Prefers, in order: a `pipx install -e .` editable install's own venv, then
-# a local .venv/, then a bare `python3` on $PATH (CI, or anyone who ran
-# `pip install -e '.[dev]'` into their own active environment instead).
-PIPX_VENV := $(HOME)/.local/share/pipx/venvs/korvoice/bin/python
-PYTHON    ?= $(shell if [ -x $(PIPX_VENV) ]; then printf '%s' '$(PIPX_VENV)'; \
-                      elif [ -x .venv/bin/python ]; then printf '%s' '.venv/bin/python'; \
-                      else printf '%s' 'python3'; fi)
+# `uv run --extra dev` creates/updates an isolated project environment with
+# pytest, pytest-qt and ruff. Do not use korvoice's pipx runtime venv for
+# release checks: it intentionally contains runtime dependencies only.
+# Without uv, use the active/local virtualenv (after `make install`).
+PYTHON ?= $(shell if [ -x .venv/bin/python ]; then printf '%s' '.venv/bin/python'; \
+                   else printf '%s' 'python3'; fi)
+RUNNER := $(shell if command -v uv >/dev/null 2>&1; then \
+                     printf '%s' 'uv run --extra dev'; \
+                   else printf '%s' '$(PYTHON) -m'; fi)
 VERSION := $(shell sed -n 's/^version = "\(.*\)"/\1/p' pyproject.toml)
 TAG     := v$(VERSION)
 MSG     ?= Release $(TAG)
@@ -38,10 +39,10 @@ install:
 	$(PYTHON) -m pip install -e '.[dev]'
 
 test:
-	QT_QPA_PLATFORM=offscreen $(PYTHON) -m pytest -q
+	QT_QPA_PLATFORM=offscreen $(RUNNER) pytest -q
 
 lint:
-	$(PYTHON) -m ruff check .
+	$(RUNNER) ruff check .
 
 check: lint test
 

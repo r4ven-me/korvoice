@@ -68,7 +68,10 @@ class _ModelLoadWorker(QThread):
         try:
             import gigaam
         except ImportError as exc:
-            self.failed.emit(f"gigaam is not installed: {exc}")
+            self.failed.emit(
+                "gigaam is not installed; install the GitHub version into the korvoice "
+                f"pipx environment (see README): {exc}"
+            )
             return
         try:
             device = None if self.device == "auto" else self.device
