@@ -5,10 +5,8 @@
 # through trusted publishing. Configure the `pypi` GitHub environment and
 # matching PyPI trusted publisher before the first release.
 #
-# No typecheck target: per this author's convention, strict mypy is for
-# server/backend projects, optional for a small GUI utility like this one —
-# see pyproject.toml's [project.optional-dependencies] comment. kortalk,
-# the reference project korvoice is patterned after, skips it the same way.
+# No typecheck target — see pyproject.toml's
+# [project.optional-dependencies] comment.
 #
 # Usage:
 #   make check                          # lint + test

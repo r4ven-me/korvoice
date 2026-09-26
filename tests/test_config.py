@@ -1,3 +1,5 @@
+import pytest
+
 from korvoice.config import GENERAL_DEFAULTS, HOTKEY_DEFAULTS, Config
 
 
@@ -43,3 +45,36 @@ def test_broken_yaml_falls_back_to_defaults(config_dir):
 def test_config_file_permissions_restricted(config, config_dir):
     mode = (config_dir / "config.yaml").stat().st_mode & 0o777
     assert mode == 0o600
+
+
+def test_non_mapping_sections_fall_back_to_defaults(config_dir):
+    (config_dir / "config.yaml").write_text("general: null\nhotkeys: [1, 2]\n", encoding="utf-8")
+    config = Config()
+    assert config.get("mode") == GENERAL_DEFAULTS["mode"]
+    assert config.hotkey("record") == "Ctrl+Alt+Space"
+
+
+def test_non_mapping_document_falls_back_to_defaults(config_dir):
+    (config_dir / "config.yaml").write_text("- just\n- a list\n", encoding="utf-8")
+    config = Config()
+    assert config.get("mode") == GENERAL_DEFAULTS["mode"]
+
+
+def test_save_leaves_no_temporary_files(config, config_dir):
+    config.set("mode", "toggle")
+    assert sorted(p.name for p in config_dir.iterdir()) == ["config.yaml"]
+
+
+def test_failed_save_keeps_previous_file(config, config_dir, monkeypatch):
+    config.set("mode", "toggle")
+    before = (config_dir / "config.yaml").read_text(encoding="utf-8")
+
+    def broken_replace(*_args):
+        raise OSError("disk full")
+
+    monkeypatch.setattr("korvoice.config.os.replace", broken_replace)
+    with pytest.raises(OSError):
+        config.set("mode", "push_to_talk")
+
+    assert (config_dir / "config.yaml").read_text(encoding="utf-8") == before
+    assert sorted(p.name for p in config_dir.iterdir()) == ["config.yaml"]

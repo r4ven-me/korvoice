@@ -10,7 +10,7 @@ something fixable in the press/release matching logic. Wayland: XDG
 Desktop Portal (org.freedesktop.portal.GlobalShortcuts) via QtDBus — the
 compositor itself shows the binding confirmation dialog.
 
-Adapted from kortalk's hotkeys.py (~/Cloud/Projects/public/kortalk), with
+Adapted from kortalk's hotkeys.py, with
 one addition: korvoice's push-to-talk mode needs to know when the key is
 *released*, not just pressed, so both backends here report press AND
 release (kortalk only ever needed "activated", i.e. press). That in turn
@@ -27,6 +27,7 @@ offers "Start recording" as a fallback (see app.py).
 from __future__ import annotations
 
 import ctypes
+import itertools
 import logging
 import os
 
@@ -297,6 +298,30 @@ _PORTAL_PATH = "/org/freedesktop/portal/desktop"
 _PORTAL_IFACE = "org.freedesktop.portal.GlobalShortcuts"
 
 
+_PORTAL_SESSION_IFACE = "org.freedesktop.portal.Session"
+
+# Every portal session needs request/session tokens unique within this
+# process: re-applying the hotkey (every Settings → Save) opens a new
+# session, and reusing the old tokens collides with the still-registered
+# request/session object paths.
+_token_counter = itertools.count(1)
+
+
+def next_portal_tokens() -> tuple[str, str, str]:
+    """(CreateSession handle_token, session_handle_token, BindShortcuts
+    handle_token) — fresh on every call."""
+    n = next(_token_counter)
+    base = f"korvoice_{os.getpid()}_{n}"
+    return f"{base}_create", f"{base}_session", f"{base}_bind"
+
+
+def _object_path(value: object) -> str:
+    """A D-Bus object path as str — QtDBus hands them over either as
+    QDBusObjectPath or already converted, depending on the binding."""
+    path = getattr(value, "path", None)
+    return str(path() if callable(path) else value)
+
+
 class _PortalHotkeys(QObject):
     activated = Signal(str, bool)  # action, is_press
 
@@ -306,37 +331,49 @@ class _PortalHotkeys(QObject):
         from PySide6.QtDBus import QDBusConnection, QDBusInterface
 
         self._bindings = bindings
+        self._session_handle = ""
+        self._closed = False
         self._bus = QDBusConnection.sessionBus()
         self._iface = QDBusInterface(_PORTAL_SERVICE, _PORTAL_PATH, _PORTAL_IFACE, self._bus)
         if not self._iface.isValid():
             raise RuntimeError("GlobalShortcuts portal is unavailable")
 
-        token = f"korvoice{os.getpid()}"
+        create_token, session_token, self._bind_token = next_portal_tokens()
         sender = self._bus.baseService()[1:].replace(".", "_")
-        request_path = f"/org/freedesktop/portal/desktop/request/{sender}/{token}"
-        self._bus.connect(_PORTAL_SERVICE, request_path, "org.freedesktop.portal.Request",
+        self._request_path = f"/org/freedesktop/portal/desktop/request/{sender}/{create_token}"
+        self._bus.connect(_PORTAL_SERVICE, self._request_path, "org.freedesktop.portal.Request",
                           "Response", self._on_session_created)
         reply = self._iface.call("CreateSession", {
-            "handle_token": token,
-            "session_handle_token": f"korvoice_{os.getpid()}",
+            "handle_token": create_token,
+            "session_handle_token": session_token,
         })
         if reply.errorName():
+            self._disconnect_request()
             raise RuntimeError(f"CreateSession: {reply.errorMessage()}")
+
+    def _disconnect_request(self) -> None:
+        try:
+            self._bus.disconnect(_PORTAL_SERVICE, self._request_path,
+                                 "org.freedesktop.portal.Request", "Response",
+                                 self._on_session_created)
+        except (RuntimeError, TypeError):
+            pass
 
     @Slot("uint", "QVariantMap")
     def _on_session_created(self, code: int, results: dict) -> None:
         from PySide6.QtDBus import QDBusObjectPath
 
-        if code != 0:
+        self._disconnect_request()
+        if code != 0 or self._closed:
             return
-        session = results.get("session_handle", "")
+        self._session_handle = _object_path(results.get("session_handle", ""))
         shortcuts = [
             [action, {"description": f"korvoice: {action}",
                       "preferred_trigger": to_portal_trigger(seq)}]
             for action, seq in self._bindings.items() if seq
         ]
-        reply = self._iface.call("BindShortcuts", QDBusObjectPath(session), shortcuts, "",
-                                 {"handle_token": f"korvoice_bind{os.getpid()}"})
+        reply = self._iface.call("BindShortcuts", QDBusObjectPath(self._session_handle),
+                                 shortcuts, "", {"handle_token": self._bind_token})
         if reply.errorName():
             log.warning("portal BindShortcuts: %s", reply.errorMessage())
         else:
@@ -351,13 +388,46 @@ class _PortalHotkeys(QObject):
         self._bus.connect(_PORTAL_SERVICE, _PORTAL_PATH, _PORTAL_IFACE,
                           "Deactivated", self._on_deactivated)
 
-    @Slot("QDBusObjectPath", "QString", "qulonglong", "QVariantMap")
-    def _on_activated(self, _session, shortcut_id: str, _ts, _opts) -> None:
-        self.activated.emit(shortcut_id, True)
+    def _is_ours(self, session) -> bool:
+        """The portal broadcasts Activated/Deactivated for every session on
+        one object path — only react to this instance's own session."""
+        return not self._closed and bool(self._session_handle) \
+            and _object_path(session) == self._session_handle
 
     @Slot("QDBusObjectPath", "QString", "qulonglong", "QVariantMap")
-    def _on_deactivated(self, _session, shortcut_id: str, _ts, _opts) -> None:
-        self.activated.emit(shortcut_id, False)
+    def _on_activated(self, session, shortcut_id: str, _ts, _opts) -> None:
+        if self._is_ours(session):
+            self.activated.emit(shortcut_id, True)
+
+    @Slot("QDBusObjectPath", "QString", "qulonglong", "QVariantMap")
+    def _on_deactivated(self, session, shortcut_id: str, _ts, _opts) -> None:
+        if self._is_ours(session):
+            self.activated.emit(shortcut_id, False)
+
+    def close(self) -> None:
+        """Ends the portal session (releasing its shortcuts) and stops
+        listening. Without this, every re-apply left the previous session
+        and its signal handlers alive: one key press arrived once per
+        earlier Settings → Save, and toggle mode stopped recording on the
+        very press that started it."""
+        if self._closed:
+            return
+        self._closed = True
+        self._disconnect_request()
+        for name, slot in (("Activated", self._on_activated),
+                           ("Deactivated", self._on_deactivated)):
+            try:
+                self._bus.disconnect(_PORTAL_SERVICE, _PORTAL_PATH, _PORTAL_IFACE, name, slot)
+            except (RuntimeError, TypeError):
+                pass
+        if self._session_handle:
+            from PySide6.QtDBus import QDBusInterface
+
+            session = QDBusInterface(_PORTAL_SERVICE, self._session_handle,
+                                     _PORTAL_SESSION_IFACE, self._bus)
+            if session.isValid():
+                session.call("Close")
+        self.deleteLater()
 
 
 # -- facade -------------------------------------------------------------------
@@ -409,6 +479,8 @@ class GlobalHotkeys(QObject):
         if self._x11 is not None:
             self._x11.stop()
             self._x11 = None
-        self._portal = None
+        if self._portal is not None:
+            self._portal.close()
+            self._portal = None
         self.backend = "none"
         self.error = ""

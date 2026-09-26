@@ -1,6 +1,6 @@
 """korvoice entry point: CLI, single instance, tray, global hotkey.
 
-Architecture mirrors kortalk's app.py (~/Cloud/Projects/public/kortalk):
+Architecture mirrors the author's kortalk project's app.py:
 `korvoice` with no arguments starts the resident application (tray +
 QLocalServer + global hotkey). CLI flags are delivered to the running
 instance over a local socket and return immediately.
@@ -206,6 +206,10 @@ def run_selftest(config: Config) -> int:
     else:
         report("ydotool in PATH (Wayland autotype)", shutil.which("ydotool") is not None,
                "autotype will be unavailable on Wayland without ydotool + ydotoold")
+        report("wl-copy/wl-paste in PATH (Wayland clipboard and autotype)",
+               bool(shutil.which("wl-copy") and shutil.which("wl-paste")),
+               "install wl-clipboard — autotype needs it, and without it the "
+               "clipboard output may not work while korvoice has no focus")
 
     print(f"\nMode: {config.get('mode')}, hotkey: {config.hotkey('record') or '—'}")
     print(f"Model: {config.get('model')}, device: {config.get('device')}")
@@ -291,6 +295,7 @@ class KorvoiceApp:
         self.output = OutputDispatcher(config)
         self.output.delivered.connect(self._on_output_window)
         self.output.autotype_unavailable.connect(self._on_autotype_unavailable)
+        self.output.autotype_succeeded.connect(self._on_autotype_succeeded)
 
         self.server = QLocalServer()
         # Qt's default socket permissions let any local user connect and
@@ -495,6 +500,11 @@ class KorvoiceApp:
         self._autotype_note = tr("Autotype unavailable: {message}", message=message)
         self._update_tooltip()
 
+    def _on_autotype_succeeded(self) -> None:
+        if self._autotype_note:
+            self._autotype_note = ""
+            self._update_tooltip()
+
     # -- tray click / windows -------------------------------------------------
 
     def _tray_activated(self, reason) -> None:
@@ -533,6 +543,12 @@ class KorvoiceApp:
         self._rebuild_menu()
         self._apply_hotkeys()
         self.recorder.device = self._resolve_input_device()
+        # A newly selected model/device starts loading right away, not on
+        # the next dictation; a no-op when neither changed.
+        self.engine.preload()
+        if not self.config.get("output_autotype"):
+            self._autotype_note = ""
+            self._update_tooltip()
         if self.history_window is not None:
             self.history_window.refresh_theme()
 

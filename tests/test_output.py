@@ -1,9 +1,22 @@
 import shutil
+import subprocess
 
+import pytest
 from PySide6.QtCore import QMimeData
 from PySide6.QtGui import QGuiApplication
 
+import korvoice.output as output_mod
+from korvoice.clipboard import SECRET_HINT_MIME, QtClipboard
 from korvoice.output import OutputDispatcher, remove_fillers
+
+
+@pytest.fixture(autouse=True)
+def _reset_ydotool_cache():
+    output_mod.ydotool_is_legacy.cache_clear()
+
+
+def _which_only(*names):
+    return lambda name: f"/usr/bin/{name}" if name in names else None
 
 
 def test_remove_fillers_cleans_common_hesitation_variants():
@@ -43,16 +56,52 @@ def test_autotype_command_x11_missing_xdotool_emits_unavailable(config, monkeypa
     assert "xdotool" in messages[0]
 
 
-def test_autotype_command_wayland_uses_ydotool(config, monkeypatch):
+def test_autotype_command_wayland_pastes_with_ydotool_keycodes(config, monkeypatch):
     monkeypatch.setattr(QGuiApplication, "platformName", staticmethod(lambda: "wayland"))
-    monkeypatch.setattr(
-        shutil, "which", lambda name: f"/usr/bin/{name}" if name == "ydotool" else None
-    )
+    monkeypatch.setattr(shutil, "which", _which_only("ydotool", "wl-copy", "wl-paste"))
+    monkeypatch.setattr(output_mod, "ydotool_is_legacy", lambda _tool: False)
     dispatcher = OutputDispatcher(config)
 
-    command = dispatcher._autotype_command("hello")
+    command = dispatcher._autotype_command("привет")
 
-    assert command == ["/usr/bin/ydotool", "type", "--key-delay", "3", "--", "hello"]
+    assert command == ["/usr/bin/ydotool", "key", "29:1", "47:1", "47:0", "29:0"]
+
+
+def test_autotype_command_wayland_legacy_ydotool_uses_key_names(config, monkeypatch):
+    monkeypatch.setattr(QGuiApplication, "platformName", staticmethod(lambda: "wayland"))
+    monkeypatch.setattr(shutil, "which", _which_only("ydotool", "wl-copy", "wl-paste"))
+    monkeypatch.setattr(output_mod, "ydotool_is_legacy", lambda _tool: True)
+    dispatcher = OutputDispatcher(config)
+
+    assert dispatcher._autotype_command("привет") == ["/usr/bin/ydotool", "key", "ctrl+v"]
+
+
+def test_autotype_command_wayland_missing_wl_clipboard_emits_unavailable(config, monkeypatch):
+    monkeypatch.setattr(QGuiApplication, "platformName", staticmethod(lambda: "wayland"))
+    monkeypatch.setattr(shutil, "which", _which_only("ydotool"))
+    dispatcher = OutputDispatcher(config)
+    messages = []
+    dispatcher.autotype_unavailable.connect(messages.append)
+
+    assert dispatcher._autotype_command("hello") is None
+    assert len(messages) == 1
+    assert "wl-copy" in messages[0]
+
+
+@pytest.mark.parametrize(
+    ("usage", "legacy"),
+    [
+        ("Usage: ydotool <cmd> <args>\nAvailable commands:\n  type\n  recorder\n", True),
+        ("Usage: ydotool <cmd> <args>\nAvailable commands:\n  click\n  key\n  bakers\n", False),
+    ],
+)
+def test_ydotool_version_detection(monkeypatch, usage, legacy):
+    def fake_run(args, **_kwargs):
+        return subprocess.CompletedProcess(args, 1, stdout=usage, stderr="")
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+
+    assert output_mod.ydotool_is_legacy("/usr/bin/ydotool") is legacy
 
 
 def test_autotype_command_wayland_missing_ydotool_emits_unavailable(config, monkeypatch):
@@ -97,7 +146,8 @@ def test_autotype_restores_all_previous_clipboard_formats(config, qapp):
     original = QMimeData()
     original.setText("previous")
     original.setHtml("<b>previous</b>")
-    dispatcher._temporary_clipboard_original = dispatcher._clone_mime_data(original)
+    QGuiApplication.clipboard().setMimeData(original)
+    dispatcher._temporary_clipboard_original = QtClipboard().snapshot()
     dispatcher._clipboard_generation = 1
     QGuiApplication.clipboard().setText("recognized")
 
@@ -186,3 +236,91 @@ def test_dispatch_empty_text_is_noop(config, qapp):
     dispatcher.dispatch("")
 
     assert QGuiApplication.clipboard().text() == "unchanged"
+
+
+def _hint():
+    data = QGuiApplication.clipboard().mimeData()
+    return bytes(data.data(SECRET_HINT_MIME))
+
+
+def _x11_autotype_dispatcher(config, monkeypatch, *, keep: bool, hide: str):
+    monkeypatch.setattr(QGuiApplication, "platformName", staticmethod(lambda: "xcb"))
+    config.set("output_clipboard", keep)
+    config.set("output_autotype", True)
+    config.set("output_window", False)
+    config.set("clipboard_hide_history", hide)
+    dispatcher = OutputDispatcher(config)
+    monkeypatch.setattr(dispatcher, "_autotype_command", lambda _text: ["true"])
+    return dispatcher
+
+
+def test_temporary_paste_text_is_hidden_from_clipboard_history(config, qapp, monkeypatch):
+    dispatcher = _x11_autotype_dispatcher(config, monkeypatch, keep=False, hide="temporary")
+    QGuiApplication.clipboard().setText("previous")
+
+    dispatcher.dispatch("recognized")
+
+    assert QGuiApplication.clipboard().text() == "recognized"
+    assert _hint() == b"secret"
+
+
+def test_kept_text_is_not_hidden_in_temporary_mode(config, qapp, monkeypatch):
+    dispatcher = _x11_autotype_dispatcher(config, monkeypatch, keep=True, hide="temporary")
+
+    dispatcher.dispatch("recognized")
+
+    assert QGuiApplication.clipboard().text() == "recognized"
+    assert _hint() == b""
+
+
+def test_all_mode_hides_kept_text_too(config, qapp, monkeypatch):
+    dispatcher = _x11_autotype_dispatcher(config, monkeypatch, keep=True, hide="all")
+
+    dispatcher.dispatch("recognized")
+
+    assert QGuiApplication.clipboard().text() == "recognized"
+    assert _hint() == b"secret"
+
+
+def test_none_mode_never_hides(config, qapp, monkeypatch):
+    dispatcher = _x11_autotype_dispatcher(config, monkeypatch, keep=False, hide="none")
+
+    dispatcher.dispatch("recognized")
+
+    assert QGuiApplication.clipboard().text() == "recognized"
+    assert _hint() == b""
+
+
+def test_kept_text_is_put_in_clipboard_only_once(config, qapp, monkeypatch):
+    dispatcher = _x11_autotype_dispatcher(config, monkeypatch, keep=True, hide="none")
+    changes = []
+    QGuiApplication.clipboard().dataChanged.connect(lambda: changes.append(1))
+
+    dispatcher.dispatch("recognized")
+
+    assert len(changes) == 1
+
+
+def test_temporary_paste_restores_previous_clipboard(config, qapp, qtbot, monkeypatch):
+    dispatcher = _x11_autotype_dispatcher(config, monkeypatch, keep=False, hide="temporary")
+    QGuiApplication.clipboard().setText("previous")
+
+    dispatcher.dispatch("recognized")
+
+    qtbot.waitUntil(lambda: QGuiApplication.clipboard().text() == "previous", timeout=3000)
+    assert _hint() == b""
+
+
+def test_successful_autotype_emits_succeeded(config, qapp, qtbot, monkeypatch):
+    dispatcher = _x11_autotype_dispatcher(config, monkeypatch, keep=True, hide="none")
+
+    with qtbot.waitSignal(dispatcher.autotype_succeeded, timeout=3000):
+        dispatcher.dispatch("recognized")
+
+
+def test_failed_autotype_reports_unavailable(config, qapp, qtbot, monkeypatch):
+    dispatcher = _x11_autotype_dispatcher(config, monkeypatch, keep=True, hide="none")
+    monkeypatch.setattr(dispatcher, "_autotype_command", lambda _text: ["false"])
+
+    with qtbot.waitSignal(dispatcher.autotype_unavailable, timeout=3000):
+        dispatcher.dispatch("recognized")

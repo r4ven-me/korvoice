@@ -1,6 +1,6 @@
 """Themes (system / Nord dark / Nord light) and the tray icon.
 
-Adapted from kortalk's theme.py (~/Cloud/Projects/public/kortalk) — same
+Adapted from kortalk's theme.py — same
 Nord palette and window chrome, minus the markdown/pygments machinery
 kortalk needs for rendering chat responses, which korvoice has no use for.
 """
