@@ -127,9 +127,10 @@ convention for server/backend projects, optional for a small GUI utility.
 ### Publishing to PyPI
 
 `.github/workflows/publish.yml` tests and builds the package on pull requests,
-`master` pushes and manual runs. Pushing a tag matching the version in
-`pyproject.toml` (for example, `v0.1.0`) additionally publishes the wheel and source distribution to PyPI
-using trusted publishing — no API token is stored in GitHub.
+`main` pushes and manual runs. Pushing a tag matching the version in
+`pyproject.toml` (for example, `v0.1.0`) additionally publishes the wheel and
+source distribution to PyPI using trusted publishing — no API token is stored
+in GitHub.
 
 Configure a PyPI trusted publisher with owner `r4ven-me`, repository
 `korvoice`, workflow `publish.yml`, and environment `pypi`. The required
