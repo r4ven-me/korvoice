@@ -10,7 +10,7 @@ import shutil
 import subprocess
 import time
 
-from PySide6.QtCore import QObject, QThread, QTimer, Signal
+from PySide6.QtCore import QMimeData, QObject, QThread, QTimer, Signal
 from PySide6.QtGui import QGuiApplication
 
 from .clipboard import QtClipboard, WlClipboard
@@ -179,9 +179,10 @@ class OutputDispatcher(QObject):
             # the temporary clipboard contents.  Never overwrite a value the
             # user copied while autotype was running.
             delay = _RESTORE_DELAY_MS["wayland" if _is_wayland() else "x11"]
-            # `self` as the timer's context: Qt drops the pending call if the
-            # dispatcher is destroyed first, instead of calling into it.
-            QTimer.singleShot(delay, self, lambda: self._restore_clipboard(inserted, generation))
+            # Use the two-argument overload supported by every PySide6
+            # version in our >=6.5 range. The callback closes over `self`, so
+            # the dispatcher stays alive until the restore has run.
+            QTimer.singleShot(delay, lambda: self._restore_clipboard(inserted, generation))
 
     def _restore_clipboard(self, inserted: str, generation: int) -> None:
         if generation != self._clipboard_generation:
@@ -191,7 +192,11 @@ class OutputDispatcher(QObject):
         if original is None:
             return
         backend = self._clipboard_backend()
-        if backend.text() == inserted:
+        if backend.text() != inserted:
+            return
+        if isinstance(backend, QtClipboard) and isinstance(original, QMimeData):
+            backend.restore(original)
+        elif isinstance(backend, WlClipboard) and isinstance(original, tuple):
             backend.restore(original)
 
     def shutdown(self, timeout_ms: int = (_AUTOTYPE_TIMEOUT + 1) * 1000) -> None:
