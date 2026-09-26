@@ -32,9 +32,10 @@ from PySide6.QtWidgets import QApplication, QMenu, QSystemTrayIcon
 
 from . import __version__, theme
 from .asr import Engine
-from .audio import SAMPLE_RATE, Recorder, list_input_devices
+from .audio import MIN_TRANSCRIBE_SAMPLES, SAMPLE_RATE, Recorder, list_input_devices
 from .config import Config
 from .hotkeys import GlobalHotkeys
+from .i18n import set_language, tr
 from .output import OutputDispatcher
 from .settings_dialog import AboutDialog, SettingsDialog
 from .windows import HistoryWindow
@@ -82,6 +83,7 @@ DESKTOP_ENTRY = """\
 Type=Application
 Name=korvoice
 Comment=Push-to-talk Russian voice input (GigaAM)
+Comment[ru]=Голосовой ввод на русском языке (GigaAM)
 Exec={exec_path}
 Icon={icon_path}
 Terminal=false
@@ -336,29 +338,29 @@ class KorvoiceApp:
         self.menu.addAction(self.record_action)
 
         self.menu.addSeparator()
-        mode_menu = QMenu("Mode", self.menu)
+        mode_menu = QMenu(tr("Mode"), self.menu)
         mode_group = QActionGroup(mode_menu)
         mode_group.setExclusive(True)
         current_mode = str(self.config.get("mode"))
         for value, label in (("push_to_talk", "Push-to-talk"), ("toggle", "Toggle")):
-            action = QAction(label, mode_menu, checkable=True)
+            action = QAction(tr(label), mode_menu, checkable=True)
             action.setChecked(value == current_mode)
             action.triggered.connect(lambda _checked=False, v=value: self._set_mode(v))
             mode_group.addAction(action)
             mode_menu.addAction(action)
         self.menu.addMenu(mode_menu)
 
-        self.menu.addAction("Open history", self.open_history)
+        self.menu.addAction(tr("Open history"), self.open_history)
         self.menu.addSeparator()
-        self.menu.addAction("Settings", self.open_settings)
-        self.menu.addAction("About", self.open_about)
+        self.menu.addAction(tr("Settings"), self.open_settings)
+        self.menu.addAction(tr("About"), self.open_about)
         self.menu.addSeparator()
-        self.menu.addAction("Quit", self.quit)
+        self.menu.addAction(tr("Quit"), self.quit)
         self._update_tooltip()
 
     def _record_action_label(self) -> str:
-        return {"idle": "Start recording", "recording": "Stop recording",
-                "transcribing": "Recognizing…"}[self.state]
+        return tr({"idle": "Start recording", "recording": "Stop recording",
+                   "transcribing": "Recognizing…"}[self.state])
 
     def _on_record_action(self) -> None:
         if self.state == "idle":
@@ -381,9 +383,11 @@ class KorvoiceApp:
     def _update_tooltip(self) -> None:
         mode = str(self.config.get("mode"))
         hotkey = self.config.hotkey("record") or "—"
-        state_label = {"idle": "idle", "recording": "recording…",
-                       "transcribing": "recognizing…"}[self.state]
-        lines = [f"korvoice — {state_label}", f"Mode: {mode}, hotkey: {hotkey}"]
+        state_label = tr({"idle": "idle", "recording": "recording…",
+                          "transcribing": "recognizing…"}[self.state])
+        mode_label = tr("Push-to-talk" if mode == "push_to_talk" else "Toggle")
+        lines = [f"korvoice — {state_label}",
+                 tr("Mode: {mode}, hotkey: {hotkey}", mode=mode_label, hotkey=hotkey)]
         note = self.hotkeys_note()
         if note:
             lines.append(note)
@@ -393,7 +397,7 @@ class KorvoiceApp:
 
     def hotkeys_note(self) -> str:
         if getattr(self, "hotkeys", None) and self.hotkeys.backend == "none" and self.hotkeys.error:
-            return f"Hotkey unavailable: {self.hotkeys.error}"
+            return tr("Hotkey unavailable: {message}", message=self.hotkeys.error)
         return ""
 
     def _apply_hotkeys(self) -> None:
@@ -421,9 +425,17 @@ class KorvoiceApp:
         try:
             self.recorder.device = self._resolve_input_device()
             self.recorder.start()
+            if self.recorder.used_default_fallback:
+                self.config.set("input_device", "")
+                self.tray.showMessage(
+                    "korvoice",
+                    tr("Selected microphone is unavailable; using the system default."),
+                    QSystemTrayIcon.MessageIcon.Information,
+                )
         except Exception as exc:  # noqa: BLE001 — surface, don't crash the daemon
             log.warning("failed to start recording: %s", exc)
-            self.tray.showMessage("korvoice", f"Could not start recording: {exc}",
+            self.tray.showMessage(
+                "korvoice", tr("Could not start recording: {message}", message=exc),
                                   QSystemTrayIcon.MessageIcon.Warning)
             return
         self.state = "recording"
@@ -437,6 +449,15 @@ class KorvoiceApp:
         held_for = time.monotonic() - self._record_started_at
         log.debug("recording stopped: held %.2fs, captured %.2fs of audio",
                  held_for, len(audio) / SAMPLE_RATE)
+        if len(audio) < MIN_TRANSCRIBE_SAMPLES:
+            log.debug(
+                "recording ignored: only %.3fs (minimum %.3fs)",
+                len(audio) / SAMPLE_RATE,
+                MIN_TRANSCRIBE_SAMPLES / SAMPLE_RATE,
+            )
+            self.state = "idle"
+            self._update_tray_visuals()
+            return
         self.state = "transcribing"
         self._transcribe_started_at = time.monotonic()
         self._update_tray_visuals()
@@ -458,14 +479,15 @@ class KorvoiceApp:
     def _on_engine_error(self, message: str) -> None:
         self.state = "idle"
         self._update_tray_visuals()
-        self.tray.showMessage("korvoice", f"Recognition failed: {message}",
+        self.tray.showMessage(
+            "korvoice", tr("Recognition failed: {message}", message=message),
                               QSystemTrayIcon.MessageIcon.Warning)
 
     def _on_output_window(self, text: str) -> None:
         self._show_history_window().append_text(text)
 
     def _on_autotype_unavailable(self, message: str) -> None:
-        self._autotype_note = f"Autotype unavailable: {message}"
+        self._autotype_note = tr("Autotype unavailable: {message}", message=message)
         self._update_tooltip()
 
     # -- tray click / windows -------------------------------------------------
@@ -476,7 +498,7 @@ class KorvoiceApp:
 
     def _show_history_window(self) -> HistoryWindow:
         if self.history_window is None:
-            self.history_window = HistoryWindow()
+            self.history_window = HistoryWindow(self.config)
         return self.history_window
 
     def open_history(self) -> None:
@@ -596,6 +618,7 @@ def main(argv: list[str] | None = None) -> int:
         app = QApplication(sys.argv[:1])
         app.setApplicationName("korvoice")
         config = Config()
+        set_language(str(config.get("language")))
 
         if args.check:
             return run_selftest(config)

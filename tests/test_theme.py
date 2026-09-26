@@ -29,7 +29,7 @@ def test_tray_icon_color_auto_is_none():
 
 
 def test_tray_icon_color_explicit():
-    assert theme.tray_icon_color("dark") == QColor(theme.NORD["n0"])
+    assert theme.tray_icon_color("dark") == QColor(theme.NORD["n00"])
     assert theme.tray_icon_color("light") == QColor(theme.NORD["n6"])
 
 
@@ -58,8 +58,9 @@ def test_make_tray_icon_states_render_differently(qapp):
     assert images["recording"] != images["transcribing"]
 
 
-def test_install_icon_file_writes_png(tmp_path, monkeypatch, qapp):
-    monkeypatch.setattr(theme, "ICON_FILE", tmp_path / "icons" / "korvoice.png")
+def test_install_icon_file_writes_black_desktop_svg(tmp_path, monkeypatch, qapp):
+    monkeypatch.setattr(theme, "ICON_FILE", tmp_path / "icons" / "korvoice.svg")
     path = theme.install_icon_file()
     assert path.exists()
-    assert path.read_bytes()[:8] == b"\x89PNG\r\n\x1a\n"
+    assert path.read_bytes() == theme.DESKTOP_ICON.read_bytes()
+    assert "#000000" in path.read_text(encoding="utf-8")

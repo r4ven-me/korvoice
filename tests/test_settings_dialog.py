@@ -1,7 +1,54 @@
 from PySide6.QtGui import QKeySequence
-from PySide6.QtWidgets import QMessageBox
+from PySide6.QtWidgets import QLabel, QMessageBox
 
+import korvoice.settings_dialog as settings_dialog_mod
+from korvoice.i18n import current_language, set_language
 from korvoice.settings_dialog import SettingsDialog
+
+
+def test_about_lists_telegram_channel_and_chat(qapp, monkeypatch):
+    set_language("en")
+    monkeypatch.setattr(settings_dialog_mod, "__telegram__", "https://t.me/r4ven_me")
+    monkeypatch.setattr(settings_dialog_mod, "__chat__", "https://t.me/r4ven_me_chat")
+
+    widget = settings_dialog_mod._build_about_widget()
+    texts = [label.text() for label in widget.findChildren(QLabel)]
+
+    assert any("Telegram channel:" in text and "https://t.me/r4ven_me" in text for text in texts)
+    assert any("Telegram chat:" in text and "https://t.me/r4ven_me_chat" in text for text in texts)
+    set_language("system")
+
+
+def test_russian_locale_localizes_settings_window(config, qapp, monkeypatch):
+    monkeypatch.setenv("LANGUAGE", "ru")
+
+    dialog = SettingsDialog(config)
+
+    assert dialog.windowTitle() == "Настройки — korvoice"
+    assert dialog.output_clipboard.text() == "Оставлять распознанный текст в буфере обмена"
+    assert dialog.output_suffix_combo.itemText(0) == "Ничего"
+    assert dialog.remove_fillers.text() == "Удалять слова-паразиты (э, э-э, эм, м-м)"
+
+
+def test_english_filler_option_uses_latin_examples(config, qapp):
+    set_language("en")
+
+    dialog = SettingsDialog(config)
+
+    assert dialog.remove_fillers.text() == "Remove hesitation sounds (eh, eh-eh, um, mm)"
+    set_language("system")
+
+
+def test_saving_manual_language_applies_immediately(config, qapp):
+    set_language("system")
+    dialog = SettingsDialog(config)
+    dialog.language_combo.setCurrentIndex(dialog.language_combo.findData("ru"))
+
+    dialog._save()
+
+    assert config.get("language") == "ru"
+    assert current_language() == "ru"
+    set_language("system")
 
 
 def test_hotkey_type_defaults_to_custom_combination(config, qapp):
@@ -50,6 +97,43 @@ def test_switching_back_to_custom_combination_enables_row(config, qapp):
 
     assert dialog.hotkey_type_combo.currentData() == ""
     assert dialog.hotkey_combo_row.isEnabled()
+
+
+def test_saving_history_persistence_option_persists(config, qapp):
+    dialog = SettingsDialog(config)
+    dialog.history_persistent.setChecked(True)
+
+    dialog._save()
+
+    assert config.get("history_persistent") is True
+
+
+def test_saving_remove_fillers_option_persists(config, qapp):
+    dialog = SettingsDialog(config)
+    dialog.remove_fillers.setChecked(True)
+
+    dialog._save()
+
+    assert config.get("remove_fillers") is True
+
+
+def test_output_suffix_preselects_standard_value(config, qapp):
+    config.set("output_suffix", "\n")
+
+    dialog = SettingsDialog(config)
+
+    assert dialog.output_suffix_combo.currentData() == "\n"
+    assert not dialog.output_suffix_custom.isEnabled()
+
+
+def test_saving_custom_output_suffix_persists(config, qapp):
+    dialog = SettingsDialog(config)
+    dialog.output_suffix_combo.setCurrentIndex(dialog.output_suffix_combo.count() - 1)
+    dialog.output_suffix_custom.setText(" → ")
+
+    dialog._save()
+
+    assert config.get("output_suffix") == " → "
 
 
 def test_saving_empty_hotkey_prompts_and_is_blocked_on_no(config, qapp, monkeypatch):

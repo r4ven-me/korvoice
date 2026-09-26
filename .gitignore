@@ -16,3 +16,4 @@ build/
 
 # Editors / OS
 .DS_Store
+.serena/

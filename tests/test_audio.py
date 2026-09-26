@@ -2,7 +2,38 @@ import wave
 
 import numpy as np
 
-from korvoice.audio import SAMPLE_RATE, resample_linear, split_on_silence, write_wav
+import korvoice.audio as audio_mod
+from korvoice.audio import SAMPLE_RATE, Recorder, resample_linear, split_on_silence, write_wav
+
+
+def test_recorder_falls_back_when_selected_device_is_unavailable(monkeypatch):
+    opened_devices = []
+
+    class FakeStream:
+        def start(self):
+            return None
+
+        def close(self):
+            return None
+
+    def open_stream(**kwargs):
+        device = kwargs["device"]
+        opened_devices.append(device)
+        if device == 0:
+            raise audio_mod.sd.PortAudioError("device unavailable")
+        return FakeStream()
+
+    monkeypatch.setattr(
+        audio_mod.sd, "query_devices", lambda *args, **kwargs: {"default_samplerate": 48000}
+    )
+    monkeypatch.setattr(audio_mod.sd, "InputStream", open_stream)
+    recorder = Recorder(device=0)
+
+    recorder.start()
+
+    assert opened_devices == [0, None]
+    assert recorder.device is None
+    assert recorder.used_default_fallback is True
 
 
 def test_resample_linear_same_rate_returns_input_unchanged():

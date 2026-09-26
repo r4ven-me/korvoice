@@ -53,15 +53,22 @@ dependencies = [
 # reference project this one is patterned after (kortalk) skips it too.
 dev = ["pytest>=8.2,<9", "pytest-qt>=4", "ruff>=0.5,<1"]
 
+# Presentation convention: keep all four public project contacts together
+# everywhere links are shown (About, README, release/package metadata).
 [project.urls]
 Homepage = "https://r4ven.me"
 Repository = "https://github.com/r4ven-me/korvoice"
+Telegram = "https://t.me/r4ven_me"
+Chat = "https://t.me/r4ven_me_chat"
 
 [project.scripts]
 korvoice = "korvoice.app:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.setuptools.package-data]
+korvoice = ["icons/*.svg"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

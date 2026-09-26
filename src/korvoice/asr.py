@@ -16,7 +16,7 @@ from pathlib import Path
 import numpy as np
 from PySide6.QtCore import QObject, QThread, Signal
 
-from .audio import SAMPLE_RATE, split_on_silence, write_wav
+from .audio import MIN_TRANSCRIBE_SAMPLES, SAMPLE_RATE, split_on_silence, write_wav
 from .config import Config
 
 log = logging.getLogger(__name__)
@@ -161,7 +161,12 @@ class Engine(QObject):
         self._start_load(model_name, device, key)
 
     def transcribe(self, audio: np.ndarray) -> None:
-        if audio.size == 0:
+        if audio.size < MIN_TRANSCRIBE_SAMPLES:
+            log.debug(
+                "audio too short to transcribe: %.3fs (minimum %.3fs)",
+                audio.size / SAMPLE_RATE,
+                MIN_TRANSCRIBE_SAMPLES / SAMPLE_RATE,
+            )
             return
         model_name = str(self.config.get("model"))
         device = str(self.config.get("device"))

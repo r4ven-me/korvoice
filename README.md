@@ -62,6 +62,7 @@ Settings (`~/.config/korvoice/config.yaml`, YAML, written on every change):
 | Setting | Values | Default |
 | --- | --- | --- |
 | Theme | `system` / `nord-dark` / `nord-light` | `system` |
+| Interface language | `system` / `ru` / `en` | `system` |
 | Tray icon colour | `auto` / `dark` / `light` | `auto` |
 | Recording mode | `push_to_talk` / `toggle` | `push_to_talk` |
 | Record hotkey | `Ctrl+Alt+...`-style combination, or a single modifier (Right/Left Ctrl/Shift/Alt/Super) | `Ctrl+Alt+Space` |
@@ -69,7 +70,9 @@ Settings (`~/.config/korvoice/config.yaml`, YAML, written on every change):
 | Inference device | `auto` / `cpu` / `cuda` | `auto` |
 | Max chunk length | 5-24 seconds | `20` |
 | Microphone | any input device PortAudio reports | system default |
-| Output: clipboard / autotype / history window | on/off, independently | all on |
+| Output: keep in clipboard / autotype / history window | on/off, independently | all on |
+| Text ending | nothing / space / new line / blank line / custom text | nothing |
+| Keep history between restarts | on/off (last 1000 entries) | off |
 | Autostart at login | on/off | off |
 
 ### GPU acceleration
@@ -89,10 +92,13 @@ scope for this project for now.
 Both backends are external system tools, not pip dependencies:
 
 - **X11**: [`xdotool`](https://github.com/jordansissel/xdotool)
-  (`sudo apt install xdotool` or your distro's equivalent). Tried
-  [`pynput`](https://pypi.org/project/pynput/) first — dropped it, it
-  raises `InvalidCharacterException` partway through Cyrillic text (X11
-  keymap-remap limits), which is most of what this app types.
+  (`sudo apt install xdotool` or your distro's equivalent). Korvoice puts
+  the text in Qt's clipboard and asks `xdotool` to send one `Ctrl+V` rather
+  than emulating every character: `xdotool type` repeatedly changes the X11
+  keymap for Cyrillic and can freeze the whole desktop. Therefore X11
+  autotype uses the clipboard temporarily; when “keep in clipboard” is off,
+  the previous MIME contents are restored after pasting (clipboard-history
+  managers may still record the temporary text).
 - **Wayland**: [`ydotool`](https://github.com/ktr0731/ydotool), whose
   daemon (`ydotoold`) needs to be running with access to `/dev/uinput`.
 
@@ -116,10 +122,19 @@ No `.github/workflows/` yet either: korvoice depends on GigaAM via a
 currently lives — see `pyproject.toml`), which PyPI rejects in uploaded
 package metadata, so there's no PyPI project to publish to yet.
 
+## Links
+
+Project presentation convention: whenever project contacts are listed, keep
+all four links together:
+
+- Website: [r4ven.me](https://r4ven.me)
+- GitHub: [github.com/r4ven-me/korvoice](https://github.com/r4ven-me/korvoice)
+- Telegram channel: [t.me/r4ven_me](https://t.me/r4ven_me)
+- Telegram chat: [t.me/r4ven_me_chat](https://t.me/r4ven_me_chat)
+
 ## Author
 
-[Ivan Cherniy](https://r4ven.me) — [r4ven.me](https://r4ven.me).
-Source: [github.com/r4ven-me/korvoice](https://github.com/r4ven-me/korvoice).
+[Ivan Cherniy](https://r4ven.me).
 
 ## Credits
 

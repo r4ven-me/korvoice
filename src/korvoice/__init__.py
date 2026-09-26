@@ -35,6 +35,8 @@ try:
     _urls = _metadata.get_all("Project-URL", [])
     __homepage__ = _project_url(_urls, "Homepage")
     __repository__ = _project_url(_urls, "Repository")
+    __telegram__ = _project_url(_urls, "Telegram")
+    __chat__ = _project_url(_urls, "Chat")
 except PackageNotFoundError:
     # Running from a source checkout, not installed.
     __version__ = "0.0.0+unknown"
@@ -43,3 +45,5 @@ except PackageNotFoundError:
     __license__ = ""
     __homepage__ = ""
     __repository__ = ""
+    __telegram__ = ""
+    __chat__ = ""

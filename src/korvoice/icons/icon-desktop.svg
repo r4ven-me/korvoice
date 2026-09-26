@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24">
+  <defs>
+    <mask id="cutouts">
+      <rect width="24" height="24" fill="black"/>
+      <rect x="7" y="2" width="12" height="20" rx="4" fill="white"/>
+      <circle cx="13" cy="8" r="2.25" fill="black"/>
+      <rect x="12" y="13" width="2" height="4" rx="1" fill="black"/>
+    </mask>
+  </defs>
+  <rect width="24" height="24" fill="#000000" mask="url(#cutouts)"/>
+</svg>

@@ -9,9 +9,10 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
+from typing import cast
 
 from PySide6.QtCore import QPoint, Qt
-from PySide6.QtGui import QColor, QIcon, QImage, QPainter, QPainterPath, QPalette, QPixmap, QPolygon
+from PySide6.QtGui import QColor, QIcon, QPainter, QPalette, QPixmap, QPolygon
 
 # https://www.nordtheme.com/docs/colors-and-palettes
 # n00 is a darker Polar Night shade used by many Nord ports for backgrounds.
@@ -275,94 +276,34 @@ def apply_window_theme(window) -> None:
 
 def _app_instance():
     from PySide6.QtWidgets import QApplication
-    return QApplication.instance()
+    return cast(QApplication | None, QApplication.instance())
 
 
 # -- tray icon ----------------------------------------------------------------
 #
 # A microphone glyph drawn directly with QPainter (capsule head + stand +
 # base), rather than a sourced SVG asset — simple enough to draw exactly,
-# and avoids pulling in and attributing a third-party icon for something
-# this plain. Recolourable at runtime like kortalk's raven, plus a "dot"
-# accent distinguishing recording from transcribing — the two used to
-# render identically (both just "recording=True"), which read as one
-# state with no way to tell whether korvoice was still listening or
-# already done and just churning on the model.
+# Base SVG icons supplied with the application.  The two variants use the
+# extreme Nord tones: Snow Storm n6 for dark surfaces and Polar Night n00
+# for light surfaces.
+_STATE_DOT_COLORS = {"recording": "n11", "transcribing": "n13"}
+_ICON_DIR = Path(__file__).with_name("icons")
+LIGHT_ICON = _ICON_DIR / "icon-light.svg"
+DARK_ICON = _ICON_DIR / "icon-dark.svg"
+DESKTOP_ICON = _ICON_DIR / "icon-desktop.svg"
 
-# Icon accent colour per KorvoiceApp.state (app.py) — "idle" gets no dot.
-_STATE_DOT_COLORS = {"recording": "n11", "transcribing": "n13"}  # red / aurora yellow
-
-
-def _draw_mic(painter: QPainter, rect_size: int, color: QColor, state: str) -> None:
-    painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-    painter.setPen(Qt.PenStyle.NoPen)
-    painter.setBrush(color)
-
-    s = rect_size
-    # Capsule "head" of the mic: centered, roughly the top half of the glyph.
-    head_w, head_h = s * 0.34, s * 0.46
-    head_rect_x = (s - head_w) / 2
-    head_rect_y = s * 0.06
-    path = QPainterPath()
-    path.addRoundedRect(head_rect_x, head_rect_y, head_w, head_h, head_w / 2, head_w / 2)
-    painter.drawPath(path)
-
-    # Stand: an arc cradling the bottom of the head, plus a short vertical
-    # post and a horizontal base — the familiar "mic on a stand" silhouette.
-    pen = painter.pen()
-    stroke = max(1.0, s * 0.07)
-    from PySide6.QtGui import QPen
-    arc_pen = QPen(color, stroke, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap)
-    painter.setPen(arc_pen)
-    painter.setBrush(Qt.BrushStyle.NoBrush)
-    arc_rect_x = s * 0.20
-    arc_rect_y = head_rect_y + head_h * 0.35
-    arc_size = s * 0.60
-    painter.drawArc(int(arc_rect_x), int(arc_rect_y), int(arc_size), int(arc_size),
-                     -20 * 16, -140 * 16)
-
-    post_x = s / 2
-    post_top = arc_rect_y + arc_size * 0.82
-    post_bottom = s * 0.88
-    painter.drawLine(int(post_x), int(post_top), int(post_x), int(post_bottom))
-    base_half = s * 0.16
-    painter.drawLine(int(post_x - base_half), int(post_bottom),
-                      int(post_x + base_half), int(post_bottom))
-    painter.setPen(pen)
-
-    dot_color = _STATE_DOT_COLORS.get(state)
-    if dot_color:
-        dot_r = s * 0.16
-        painter.setPen(Qt.PenStyle.NoPen)
-        painter.setBrush(QColor(NORD[dot_color]))
-        painter.drawEllipse(int(s - dot_r * 1.7), int(s - dot_r * 1.7),
-                             int(dot_r * 1.6), int(dot_r * 1.6))
-
-
-# Static icon file for the applications-menu launcher and the autostart
-# entry (as opposed to make_tray_icon's runtime-recoloured pixmaps) —
-# pip/pipx installs it nowhere, so korvoice writes it itself.
+# Static dark icon for the applications-menu launcher and autostart entry.
+# pip/pipx installs the source asset inside the package; korvoice copies it
+# to the user's icon directory so desktop files can reference a stable path.
 ICON_FILE = (Path(os.environ.get("XDG_DATA_HOME", str(Path.home() / ".local" / "share")))
-             / "icons" / "korvoice.png")
+             / "icons" / "korvoice.svg")
 
 
 def install_icon_file() -> Path:
-    """Writes a fixed-colour icon to ICON_FILE and returns its path. Always
-    overwrites so an icon update ships to existing installs — safe to call
-    on every startup, pip/pipx never places this file on its own.
-
-    Uses QImage, not QPixmap: this runs from app.ensure_desktop_entry()
-    before a QApplication exists yet (deliberately — see that function's
-    docstring), and QPixmap requires one already constructed while QImage,
-    being platform-independent, does not."""
+    """Installs the dark Nord SVG used by desktop and autostart entries."""
     try:
         ICON_FILE.parent.mkdir(parents=True, exist_ok=True)
-        image = QImage(128, 128, QImage.Format.Format_ARGB32)
-        image.fill(Qt.GlobalColor.transparent)
-        painter = QPainter(image)
-        _draw_mic(painter, 128, QColor(NORD["n10"]), state="idle")
-        painter.end()
-        image.save(str(ICON_FILE), "PNG")
+        ICON_FILE.write_bytes(DESKTOP_ICON.read_bytes())
     except OSError:
         pass
     return ICON_FILE
@@ -372,37 +313,44 @@ def install_icon_file() -> Path:
 # default palette-following colour. The system tray's own background isn't
 # necessarily the same as the app's chosen theme, so "auto" doesn't always
 # pick a legible icon.
-_TRAY_ICON_COLORS = {"dark": NORD["n0"], "light": NORD["n6"]}
+_TRAY_ICON_COLORS = {"dark": NORD["n00"], "light": NORD["n6"]}
 
 
 def tray_icon_color(setting: str) -> QColor | None:
-    """None for "auto" — make_tray_icon then falls back to the app
-    palette's WindowText colour, following the selected theme. An explicit
-    QColor for "dark"/"light" instead, independent of the theme."""
+    """Returns the requested extreme Nord tone, or None for automatic."""
     tone = _TRAY_ICON_COLORS.get(setting)
     return QColor(tone) if tone else None
 
 
 def make_tray_icon(color: QColor | str | None = None, state: str = "idle") -> QIcon:
-    """Monochrome microphone glyph. The default colour is the text colour
-    of the current application palette, so the icon is light on dark
-    panels and dark on light panels. `state` ("idle"/"recording"/
-    "transcribing" — matches KorvoiceApp.state in app.py exactly, passed
-    straight through) adds a coloured dot for the two non-idle states,
-    red vs aurora yellow, so recording and transcribing are visually
-    distinct instead of both just reading as "something is happening"."""
+    """Returns the supplied SVG in the tone best suited to the current theme.
+
+    Recording and transcription retain their red/yellow state dots.  A
+    requested light color selects the n6 asset; a dark color selects n00.
+    """
     if color is None:
         app = _app_instance()
         color = (app.palette().color(QPalette.ColorRole.WindowText)
-                 if app is not None else QColor(NORD["n5"]))
+                 if app is not None else QColor(NORD["n6"]))
     color = QColor(color)
+    source = LIGHT_ICON if color.lightness() >= 128 else DARK_ICON
+    base = QIcon(str(source))
+
+    if state not in _STATE_DOT_COLORS:
+        return base
 
     icon = QIcon()
     for size in (22, 24, 32, 48, 64, 128):
-        pixmap = QPixmap(size, size)
-        pixmap.fill(Qt.GlobalColor.transparent)
+        pixmap = base.pixmap(size, size)
         painter = QPainter(pixmap)
-        _draw_mic(painter, size, color, state)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        dot_r = size * 0.16
+        painter.setPen(Qt.PenStyle.NoPen)
+        painter.setBrush(QColor(NORD[_STATE_DOT_COLORS[state]]))
+        painter.drawEllipse(
+            int(size - dot_r * 1.7), int(size - dot_r * 1.7),
+            int(dot_r * 1.6), int(dot_r * 1.6),
+        )
         painter.end()
         icon.addPixmap(pixmap)
     return icon

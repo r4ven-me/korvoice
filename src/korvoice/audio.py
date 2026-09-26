@@ -19,6 +19,7 @@ import numpy as np
 import sounddevice as sd
 
 SAMPLE_RATE = 16000  # GigaAM's fixed expectation (gigaam.preprocess.SAMPLE_RATE)
+MIN_TRANSCRIBE_SAMPLES = SAMPLE_RATE // 10  # ignore accidental taps shorter than 100 ms
 _DTYPE = "float32"
 
 log = logging.getLogger(__name__)
@@ -39,11 +40,12 @@ class Recorder:
     queue/ring-buffer to matter."""
 
     def __init__(self, device: str | int | None = None) -> None:
-        self.device: str | int | None = device or None
+        self.device: str | int | None = None if device in (None, "") else device
         self._frames: list[np.ndarray] = []
         self._stream: sd.InputStream | None = None
         self._lock = threading.Lock()
         self._samplerate = SAMPLE_RATE
+        self.used_default_fallback = False
 
     def _resolve_samplerate(self) -> int:
         """The device's own default rate — sd.query_devices()'s `kind`
@@ -60,12 +62,33 @@ class Recorder:
 
     def start(self) -> None:
         self._frames = []
-        self._samplerate = self._resolve_samplerate()
-        self._stream = sd.InputStream(
-            samplerate=self._samplerate, channels=1, dtype=_DTYPE,
-            device=self.device, callback=self._callback,
-        )
-        self._stream.start()
+        self.used_default_fallback = False
+        requested_device = self.device
+        devices = (requested_device, None) if requested_device is not None else (None,)
+
+        for device in devices:
+            self.device = device
+            self._samplerate = self._resolve_samplerate()
+            try:
+                self._stream = sd.InputStream(
+                    samplerate=self._samplerate, channels=1, dtype=_DTYPE,
+                    device=device, callback=self._callback,
+                )
+                self._stream.start()
+                self.used_default_fallback = device is None and requested_device is not None
+                return
+            except sd.PortAudioError:
+                if self._stream is not None:
+                    try:
+                        self._stream.close()
+                    except sd.PortAudioError:
+                        pass
+                    self._stream = None
+                if device is None:
+                    raise
+                log.warning("input device %s unavailable, retrying with system default", device)
+
+        raise RuntimeError("no input device could be opened")
 
     def _callback(self, indata, _frames, _time_info, status) -> None:
         if status:

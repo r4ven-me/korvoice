@@ -37,6 +37,13 @@ MODE_CHOICES = [
     ("toggle", "Toggle (press to start/stop)"),
 ]
 
+OUTPUT_SUFFIX_CHOICES = [
+    ("", "Nothing"),
+    (" ", "Space"),
+    ("\n", "New line"),
+    ("\n\n", "Blank line"),
+]
+
 # X11 keysym names for the bare modifier keys, used as-is as the whole
 # hotkey string (no "+"-joined combination) — hotkeys.parse_sequence's
 # fallback already passes an unrecognised multi-character key name through
@@ -57,6 +64,7 @@ SINGLE_KEY_CHOICES = [
 
 GENERAL_DEFAULTS = {
     "theme": "system",          # system | nord-dark | nord-light
+    "language": "system",       # system | ru | en
     # auto = follow the app's own theme; dark/light pin a specific icon
     # colour regardless of it — the system tray's own background isn't
     # necessarily the same as the app's theme (see theme.tray_icon_color).
@@ -72,6 +80,9 @@ GENERAL_DEFAULTS = {
     "output_clipboard": True,
     "output_autotype": True,
     "output_window": True,
+    "output_suffix": "",       # appended after every recognized utterance
+    "remove_fillers": False,    # remove standalone э / э-э / эм / м-м
+    "history_persistent": False,
 }
 
 HOTKEY_DEFAULTS = {
