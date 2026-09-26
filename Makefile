@@ -49,17 +49,23 @@ check: lint test
 version:
 	@echo $(TAG)
 
-# Tags the version currently in pyproject.toml and pushes it. Refuses to
-# re-tag a version that was already released — bump pyproject.toml first.
+# Tags the version currently in pyproject.toml and pushes it. If that tag
+# already exists locally or on origin, move it to the new release commit.
+# This is useful for retrying a failed CI publish, but cannot overwrite a
+# version that PyPI has already accepted (PyPI releases are immutable).
 release: check
 	@if [ -n "$$(git status --porcelain)" ]; then \
 		git add -A; \
 		git commit -m "$(MSG)"; \
 	fi
-	@if git rev-parse "$(TAG)" >/dev/null 2>&1; then \
-		echo "release: tag $(TAG) already exists -- bump the version in pyproject.toml first" >&2; \
-		exit 1; \
-	fi
 	git push origin HEAD
+	@if git ls-remote --exit-code --tags origin "refs/tags/$(TAG)" >/dev/null 2>&1; then \
+		echo "release: replacing remote tag $(TAG)"; \
+		git push origin ":refs/tags/$(TAG)"; \
+	fi
+	@if git rev-parse "refs/tags/$(TAG)" >/dev/null 2>&1; then \
+		echo "release: replacing local tag $(TAG)"; \
+		git tag -d "$(TAG)"; \
+	fi
 	git tag -a "$(TAG)" -m "Release $(TAG)"
 	git push origin "$(TAG)"

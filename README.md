@@ -130,7 +130,9 @@ convention for server/backend projects, optional for a small GUI utility.
 `main` pushes and manual runs. Pushing a tag matching the version in
 `pyproject.toml` (for example, `v0.1.0`) additionally publishes the wheel and
 source distribution to PyPI using trusted publishing — no API token is stored
-in GitHub.
+in GitHub. `make release` moves an existing tag of the same version to the
+new commit, which allows retrying a failed workflow; it cannot overwrite a
+version already accepted by PyPI.
 
 Configure a PyPI trusted publisher with owner `r4ven-me`, repository
 `korvoice`, workflow `publish.yml`, and environment `pypi`. The required
