@@ -572,6 +572,7 @@ class KorvoiceApp:
         self.hotkeys.stop()
         if self.state == "recording":
             self.recorder.stop()
+        self.output.shutdown()
         self.app.quit()
 
     # -- IPC ----------------------------------------------------------------

@@ -15,6 +15,23 @@ def _reset_ydotool_cache():
     output_mod.ydotool_is_legacy.cache_clear()
 
 
+@pytest.fixture(autouse=True)
+def _join_autotype_workers(monkeypatch):
+    """Tests may end while an autotype subprocess still runs; its QThread
+    must finish before the dispatcher owning it is garbage-collected."""
+    dispatchers = []
+    original_init = OutputDispatcher.__init__
+
+    def tracking_init(self, *args, **kwargs):
+        original_init(self, *args, **kwargs)
+        dispatchers.append(self)
+
+    monkeypatch.setattr(OutputDispatcher, "__init__", tracking_init)
+    yield
+    for dispatcher in dispatchers:
+        dispatcher.shutdown()
+
+
 def _which_only(*names):
     return lambda name: f"/usr/bin/{name}" if name in names else None
 
@@ -324,3 +341,15 @@ def test_failed_autotype_reports_unavailable(config, qapp, qtbot, monkeypatch):
 
     with qtbot.waitSignal(dispatcher.autotype_unavailable, timeout=3000):
         dispatcher.dispatch("recognized")
+
+
+def test_shutdown_waits_for_running_autotype(config, qapp, monkeypatch):
+    dispatcher = _x11_autotype_dispatcher(config, monkeypatch, keep=True, hide="none")
+    monkeypatch.setattr(dispatcher, "_autotype_command", lambda _text: ["sleep", "0.3"])
+    dispatcher.dispatch("recognized")
+    worker = dispatcher._autotype_workers[0]
+
+    dispatcher.shutdown()
+
+    assert worker.isFinished()
+    assert dispatcher._autotype_workers == []
