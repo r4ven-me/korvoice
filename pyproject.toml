@@ -33,6 +33,9 @@ dependencies = [
 # No mypy: strict typechecking is optional for a small GUI utility like this
 # one (kortalk, the project korvoice is patterned after, skips it too).
 dev = ["pytest>=8.2,<9", "pytest-qt>=4", "ruff>=0.5,<1"]
+# Offline keyword-spotting for the optional wake-word feature (see README).
+# A normal PyPI package, unlike GigaAM — no git-dependency workaround needed.
+wakeword = ["vosk>=0.3.45"]
 
 # Presentation convention: keep all four public project contacts together
 # everywhere links are shown (About, README, release/package metadata).

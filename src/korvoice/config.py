@@ -95,6 +95,8 @@ GENERAL_DEFAULTS = {
     "clipboard_hide_history": "temporary",  # temporary | all | none
     "remove_fillers": False,    # remove standalone э / э-э / эм / м-м
     "history_persistent": False,
+    "wake_word_enabled": False,  # listen continuously for wake_word_phrase while idle
+    "wake_word_phrase": "",      # free-text Russian phrase, e.g. "привет корвойс"
 }
 
 HOTKEY_DEFAULTS = {

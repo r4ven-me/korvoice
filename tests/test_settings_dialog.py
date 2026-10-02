@@ -160,6 +160,53 @@ def test_saving_empty_hotkey_proceeds_on_yes(config, qapp, monkeypatch):
     assert config.hotkey("record") == ""
 
 
+def test_wake_word_phrase_disabled_until_checkbox_checked(config, qapp):
+    dialog = SettingsDialog(config)
+    assert not dialog.wake_word_enabled.isChecked()
+    assert not dialog.wake_word_phrase.isEnabled()
+
+    dialog.wake_word_enabled.setChecked(True)
+
+    assert dialog.wake_word_phrase.isEnabled()
+
+
+def test_saving_wake_word_settings_persists(config, qapp, monkeypatch):
+    monkeypatch.setattr(settings_dialog_mod, "wake_word_availability", lambda: (True, ""))
+    dialog = SettingsDialog(config)
+    dialog.wake_word_enabled.setChecked(True)
+    dialog.wake_word_phrase.setText("привет корвойс")
+
+    dialog._save()
+
+    assert config.get("wake_word_enabled") is True
+    assert config.get("wake_word_phrase") == "привет корвойс"
+
+
+def test_saving_wake_word_enabled_without_phrase_warns_but_saves(config, qapp, monkeypatch):
+    dialog = SettingsDialog(config)
+    dialog.wake_word_enabled.setChecked(True)
+    warned = []
+    monkeypatch.setattr(QMessageBox, "information", lambda *a, **k: warned.append(True))
+
+    dialog._save()
+
+    assert warned == [True]
+    assert config.get("wake_word_enabled") is True
+    assert config.get("wake_word_phrase") == ""
+
+
+def test_wake_word_status_label_reports_unavailable(config, qapp, monkeypatch):
+    set_language("en")
+    monkeypatch.setattr(
+        settings_dialog_mod, "wake_word_availability", lambda: (False, "model not found at X")
+    )
+
+    dialog = SettingsDialog(config)
+
+    assert "model not found at X" in dialog.wake_word_status.text()
+    set_language("system")
+
+
 def test_clipboard_hide_history_defaults_to_temporary(config, qapp):
     dialog = SettingsDialog(config)
 

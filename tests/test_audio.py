@@ -6,6 +6,65 @@ import korvoice.audio as audio_mod
 from korvoice.audio import SAMPLE_RATE, Recorder, resample_linear, split_on_silence, write_wav
 
 
+class _FakeStream:
+    def start(self):
+        return None
+
+    def close(self):
+        return None
+
+
+def test_start_wires_on_chunk_hook(monkeypatch):
+    monkeypatch.setattr(
+        audio_mod.sd, "query_devices", lambda *args, **kwargs: {"default_samplerate": 16000}
+    )
+    monkeypatch.setattr(audio_mod.sd, "InputStream", lambda **kwargs: _FakeStream())
+    recorder = Recorder()
+    received = []
+
+    recorder.start(on_chunk=received.append)
+    indata = np.array([[0.1], [0.2]], dtype=np.float32)
+    recorder._callback(indata, 2, None, None)
+
+    assert len(received) == 1
+    np.testing.assert_array_equal(received[0], indata[:, 0])
+
+
+def test_callback_without_on_chunk_does_not_raise(monkeypatch):
+    monkeypatch.setattr(
+        audio_mod.sd, "query_devices", lambda *args, **kwargs: {"default_samplerate": 16000}
+    )
+    monkeypatch.setattr(audio_mod.sd, "InputStream", lambda **kwargs: _FakeStream())
+    recorder = Recorder()
+
+    recorder.start()
+    indata = np.array([[0.1]], dtype=np.float32)
+    recorder._callback(indata, 1, None, None)  # must not raise
+
+
+def test_resolve_samplerate_module_function_matches_device_rate(monkeypatch):
+    monkeypatch.setattr(
+        audio_mod.sd, "query_devices", lambda *args, **kwargs: {"default_samplerate": 48000}
+    )
+    assert audio_mod.resolve_samplerate(0) == 48000
+
+
+def test_resolve_samplerate_falls_back_to_default_on_error(monkeypatch):
+    def raise_error(*_args, **_kwargs):
+        raise audio_mod.sd.PortAudioError("no device")
+
+    monkeypatch.setattr(audio_mod.sd, "query_devices", raise_error)
+    assert audio_mod.resolve_samplerate(None) == SAMPLE_RATE
+
+
+def test_to_pcm16_bytes_matches_write_wav_encoding():
+    audio = np.array([0.0, 0.5, -0.5, 1.0, -1.0], dtype=np.float32)
+    pcm16 = np.frombuffer(audio_mod.to_pcm16_bytes(audio), dtype=np.int16)
+    assert pcm16[0] == 0
+    assert pcm16[3] == 32767
+    assert pcm16[4] == -32767
+
+
 def test_recorder_falls_back_when_selected_device_is_unavailable(monkeypatch):
     opened_devices = []
 

@@ -127,6 +127,19 @@ _RU = {
     "v3 RNNT + punctuation (more accurate)": "v3 RNNT + пунктуация (точнее)",
     "v3 CTC (no punctuation)": "v3 CTC (без пунктуации)",
     "v3 RNNT (no punctuation)": "v3 RNNT (без пунктуации)",
+    "Enable wake word": "Включить кодовое слово",
+    "Wake phrase:": "Кодовая фраза:",
+    "e.g. привет корвойс": "например, привет корвойс",
+    "Wake-word model found.": "Модель кодового слова найдена.",
+    "Wake word unavailable: {message}": "Кодовое слово недоступно: {message}",
+    "Wake word is enabled but no phrase is set — it will stay inactive "
+    "until you add one.": "Кодовое слово включено, но фраза не задана — оно останется "
+    "неактивным, пока вы её не укажете.",
+    "Wake word is enabled but {message} — it will stay inactive until "
+    "that's fixed.": "Кодовое слово включено, но {message} — оно останется неактивным, "
+    "пока это не будет исправлено.",
+    'Wake word armed: listening for "{phrase}"':
+        "Кодовое слово активно: ожидание фразы «{phrase}»",
 }
 
 

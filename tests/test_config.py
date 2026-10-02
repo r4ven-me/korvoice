@@ -25,6 +25,15 @@ def test_set_persists_across_instances(config_dir, config):
     assert reloaded.hotkey("record") == "Ctrl+Alt+V"
 
 
+def test_wake_word_phrase_roundtrips_cyrillic_text(config_dir, config):
+    config.set("wake_word_enabled", True)
+    config.set("wake_word_phrase", "привет корвойс")
+
+    reloaded = Config()
+    assert reloaded.get("wake_word_enabled") is True
+    assert reloaded.get("wake_word_phrase") == "привет корвойс"
+
+
 def test_get_coerces_int_type(config):
     config.set("chunk_max_seconds", "15")
     assert config.get("chunk_max_seconds") == 15

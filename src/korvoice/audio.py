@@ -13,6 +13,7 @@ from __future__ import annotations
 import logging
 import threading
 import wave
+from collections.abc import Callable
 from pathlib import Path
 
 import numpy as np
@@ -45,23 +46,24 @@ class Recorder:
         self._stream: sd.InputStream | None = None
         self._lock = threading.Lock()
         self._samplerate = SAMPLE_RATE
+        self._on_chunk: Callable[[np.ndarray], None] | None = None
         self.used_default_fallback = False
 
     def _resolve_samplerate(self) -> int:
         """The device's own default rate — sd.query_devices()'s `kind`
         parameter only applies when `device` is unset (falls back to the
         system default input device in that case)."""
-        try:
-            info = (sd.query_devices(self.device) if self.device is not None
-                    else sd.query_devices(kind="input"))
-            rate = int(info["default_samplerate"])
-            return rate if rate > 0 else SAMPLE_RATE
-        except (sd.PortAudioError, TypeError, ValueError, KeyError) as exc:
-            log.debug("could not resolve device sample rate, using %d: %s", SAMPLE_RATE, exc)
-            return SAMPLE_RATE
+        return resolve_samplerate(self.device)
 
-    def start(self) -> None:
+    def start(self, on_chunk: Callable[[np.ndarray], None] | None = None) -> None:
+        """`on_chunk`, if given, is invoked with each raw mono chunk as it
+        arrives (in addition to the normal buffering), for callers that need
+        to react to audio in real time — e.g. a trailing-silence watcher for
+        a wake-word-triggered recording (see app.py). It runs on
+        sounddevice's own realtime callback thread, so it must be fast and
+        non-blocking."""
         self._frames = []
+        self._on_chunk = on_chunk
         self.used_default_fallback = False
         requested_device = self.device
         devices = (requested_device, None) if requested_device is not None else (None,)
@@ -93,8 +95,11 @@ class Recorder:
     def _callback(self, indata, _frames, _time_info, status) -> None:
         if status:
             log.debug("sounddevice status: %s", status)
+        chunk = indata[:, 0].copy()
         with self._lock:
-            self._frames.append(indata[:, 0].copy())
+            self._frames.append(chunk)
+        if self._on_chunk is not None:
+            self._on_chunk(chunk)
 
     def stop(self) -> np.ndarray:
         """Stops capture and returns the full recording as float32 in
@@ -112,6 +117,29 @@ class Recorder:
         if self._samplerate != SAMPLE_RATE:
             audio = resample_linear(audio, self._samplerate, SAMPLE_RATE)
         return audio
+
+
+def resolve_samplerate(device: str | int | None) -> int:
+    """The given input device's own default rate — a raw ALSA hw: device
+    (e.g. a USB mic exposed as "hw:0,0") only supports its own fixed rate
+    and raises PaInvalidSampleRate for anything else. `device=None` means
+    the system default input device. Shared by Recorder and anything else
+    that opens its own InputStream against the same configured device
+    (e.g. wakeword.py's continuous listener)."""
+    try:
+        info = sd.query_devices(device) if device is not None else sd.query_devices(kind="input")
+        rate = int(info["default_samplerate"])
+        return rate if rate > 0 else SAMPLE_RATE
+    except (sd.PortAudioError, TypeError, ValueError, KeyError) as exc:
+        log.debug("could not resolve device sample rate, using %d: %s", SAMPLE_RATE, exc)
+        return SAMPLE_RATE
+
+
+def to_pcm16_bytes(audio: np.ndarray) -> bytes:
+    """Float32 [-1, 1] mono -> 16-bit PCM bytes, the format both write_wav's
+    WAV container and vosk's AcceptWaveform expect."""
+    clipped = np.clip(audio, -1.0, 1.0)
+    return (clipped * 32767.0).astype(np.int16).tobytes()
 
 
 def resample_linear(audio: np.ndarray, orig_sr: int, target_sr: int) -> np.ndarray:
@@ -182,13 +210,11 @@ def split_on_silence(
 def write_wav(path: Path, audio: np.ndarray, sample_rate: int = SAMPLE_RATE) -> None:
     """Writes float32 [-1, 1] mono audio as 16-bit PCM WAV — the format
     GigaAM's own `load_audio` decodes via ffmpeg."""
-    clipped = np.clip(audio, -1.0, 1.0)
-    pcm16 = (clipped * 32767.0).astype(np.int16)
     with wave.open(str(path), "wb") as wav_file:
         wav_file.setnchannels(1)
         wav_file.setsampwidth(2)
         wav_file.setframerate(sample_rate)
-        wav_file.writeframes(pcm16.tobytes())
+        wav_file.writeframes(to_pcm16_bytes(audio))
 
 
 def list_input_devices() -> list[tuple[int, str]]:
