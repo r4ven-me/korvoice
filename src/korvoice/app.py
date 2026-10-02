@@ -383,9 +383,24 @@ class KorvoiceApp:
         self.config.set("mode", mode)
         self._update_tooltip()
 
-    def _update_tray_visuals(self) -> None:
-        self.tray.setIcon(theme.make_tray_icon(
-            theme.tray_icon_color(str(self.config.get("tray_icon"))), state=self.state))
+    def _update_tray_visuals(self, force_refresh: bool = False) -> None:
+        icon = theme.make_tray_icon(
+            theme.tray_icon_color(str(self.config.get("tray_icon"))), state=self.state
+        )
+        self.tray.setIcon(icon)
+        if force_refresh:
+            # Cinnamon can miss one StatusNotifierItem icon-property update
+            # after a long idle/suspend period. Never hide/re-register the
+            # item: that can make it disappear entirely. Re-send the fresh
+            # pixmap after the event loop has had time to flush the first
+            # update, but only if the state has not changed in the meantime.
+            expected_state = self.state
+            QTimer.singleShot(
+                150,
+                lambda refreshed=icon, expected=expected_state: (
+                    self.tray.setIcon(refreshed) if self.state == expected else None
+                ),
+            )
         if hasattr(self, "record_action"):
             self.record_action.setText(self._record_action_label())
         self._update_tooltip()
@@ -466,7 +481,7 @@ class KorvoiceApp:
                 MIN_TRANSCRIBE_SAMPLES / SAMPLE_RATE,
             )
             self.state = "idle"
-            self._update_tray_visuals()
+            self._update_tray_visuals(force_refresh=True)
             return
         self.state = "transcribing"
         self._transcribe_started_at = time.monotonic()
@@ -483,13 +498,13 @@ class KorvoiceApp:
         log.info("transcription finished in %.2fs", elapsed)
         log.debug("transcription result: %r", text)
         self.state = "idle"
-        self._update_tray_visuals()
+        self._update_tray_visuals(force_refresh=True)
         if text:
             self.output.dispatch(text)
 
     def _on_engine_error(self, message: str) -> None:
         self.state = "idle"
-        self._update_tray_visuals()
+        self._update_tray_visuals(force_refresh=True)
         self.tray.showMessage(
             "korvoice", tr("Recognition failed: {message}", message=message),
                               QSystemTrayIcon.MessageIcon.Warning)
