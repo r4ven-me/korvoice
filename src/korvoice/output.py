@@ -26,10 +26,13 @@ _AUTOTYPE_TIMEOUT = 10  # seconds — a stuck xdotool/ydotool must not hang fore
 # request travels app -> compositor -> the forked wl-copy process.
 _RESTORE_DELAY_MS = {"x11": 150, "wayland": 300}
 
-# ydotool >= 1.0 takes raw evdev keycodes (KEY_LEFTCTRL=29, KEY_V=47) as
-# code:state pairs; 0.1.x (still what Debian/Ubuntu ship) takes key names.
+# ydotool >= 1.0 takes raw evdev keycodes (KEY_LEFTCTRL=29, KEY_LEFTSHIFT=42,
+# KEY_V=47) as code:state pairs; 0.1.x (still what Debian/Ubuntu ship) takes
+# key names.
 _YDOTOOL_PASTE = ["29:1", "47:1", "47:0", "29:0"]
+_YDOTOOL_PASTE_SHIFT = ["29:1", "42:1", "47:1", "47:0", "42:0", "29:0"]
 _YDOTOOL_LEGACY_PASTE = ["ctrl+v"]
+_YDOTOOL_LEGACY_PASTE_SHIFT = ["ctrl+shift+v"]
 _FILLER_RE = re.compile(
     r"(?:[ \t]*,[ \t]*)?"
     r"(?<!\w)(?:э(?:[ \t-]*э)*|эм|м(?:[ \t-]*м)+)(?!\w)"
@@ -215,12 +218,14 @@ class OutputDispatcher(QObject):
         """Builds the paste-shortcut command for the current session type,
         or emits autotype_unavailable and returns None. Both backends are
         external system tools, not pip dependencies (see README):
-        - X11: `xdotool key` sends one Ctrl+V.
-        - Wayland: `ydotool key` sends one Ctrl+V — needs its ydotoold
-          daemon running with uinput access — and wl-clipboard puts the
-          text in the clipboard first (see clipboard.py for why not Qt).
-        Terminals usually paste with Ctrl+Shift+V instead, so autotype
-        into a terminal may do nothing."""
+        - X11: `xdotool key` sends the configured shortcut.
+        - Wayland: `ydotool key` sends it — needs its ydotoold daemon
+          running with uinput access — and wl-clipboard puts the text in
+          the clipboard first (see clipboard.py for why not Qt).
+        Most applications paste with Ctrl+V, but terminals usually expect
+        Ctrl+Shift+V instead — configurable via Settings → Output →
+        "Paste shortcut" (output_autotype_shortcut)."""
+        shortcut = str(self.config.get("output_autotype_shortcut"))
         if QGuiApplication.platformName() == "xcb":
             tool = shutil.which("xdotool")
             if not tool:
@@ -229,7 +234,7 @@ class OutputDispatcher(QObject):
                        "(e.g. sudo apt install xdotool)")
                 )
                 return None
-            return [tool, "key", "--clearmodifiers", "ctrl+v"]
+            return [tool, "key", "--clearmodifiers", shortcut]
 
         tool = shutil.which("ydotool")
         if not tool:
@@ -242,5 +247,9 @@ class OutputDispatcher(QObject):
                 tr("wl-copy not found — install wl-clipboard for autotype on Wayland")
             )
             return None
-        keys = _YDOTOOL_LEGACY_PASTE if ydotool_is_legacy(tool) else _YDOTOOL_PASTE
+        legacy = ydotool_is_legacy(tool)
+        if shortcut == "ctrl+shift+v":
+            keys = _YDOTOOL_LEGACY_PASTE_SHIFT if legacy else _YDOTOOL_PASTE_SHIFT
+        else:
+            keys = _YDOTOOL_LEGACY_PASTE if legacy else _YDOTOOL_PASTE
         return [tool, "key", *keys]

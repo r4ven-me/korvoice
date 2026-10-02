@@ -44,6 +44,7 @@ from . import (
 )
 from .audio import list_input_devices
 from .config import (
+    AUTOTYPE_SHORTCUT_CHOICES,
     CLIPBOARD_HISTORY_CHOICES,
     DEVICE_CHOICES,
     MODE_CHOICES,
@@ -281,6 +282,18 @@ class SettingsDialog(QDialog):
         self.output_autotype.setToolTip(tr("Autotype requirements"))
         layout.addWidget(self.output_autotype)
 
+        shortcut_row = QHBoxLayout()
+        shortcut_row.addWidget(QLabel(tr("Paste shortcut:")))
+        self.autotype_shortcut_combo = QComboBox()
+        for value, label in AUTOTYPE_SHORTCUT_CHOICES:
+            self.autotype_shortcut_combo.addItem(tr(label), value)
+        shortcut_index = self.autotype_shortcut_combo.findData(
+            str(self.config.get("output_autotype_shortcut")))
+        self.autotype_shortcut_combo.setCurrentIndex(max(0, shortcut_index))
+        self.autotype_shortcut_combo.setToolTip(tr("Autotype shortcut note"))
+        shortcut_row.addWidget(self.autotype_shortcut_combo, 1)
+        layout.addLayout(shortcut_row)
+
         self.output_window = QCheckBox(tr("History window"))
         self.output_window.setChecked(bool(self.config.get("output_window")))
         layout.addWidget(self.output_window)
@@ -401,6 +414,7 @@ class SettingsDialog(QDialog):
         self.config.set("output_clipboard", self.output_clipboard.isChecked())
         self.config.set("clipboard_hide_history", self.clipboard_hide_combo.currentData())
         self.config.set("output_autotype", self.output_autotype.isChecked())
+        self.config.set("output_autotype_shortcut", self.autotype_shortcut_combo.currentData())
         self.config.set("output_window", self.output_window.isChecked())
         self.config.set("history_persistent", self.history_persistent.isChecked())
         self.config.set("remove_fillers", self.remove_fillers.isChecked())

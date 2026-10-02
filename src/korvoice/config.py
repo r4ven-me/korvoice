@@ -55,6 +55,14 @@ CLIPBOARD_HISTORY_CHOICES = [
     ("none", "Nothing"),
 ]
 
+# Most applications paste with Ctrl+V; terminals usually bind that to
+# literal Ctrl+V (do nothing or insert a control character) and expect
+# Ctrl+Shift+V instead.
+AUTOTYPE_SHORTCUT_CHOICES = [
+    ("ctrl+v", "Ctrl+V"),
+    ("ctrl+shift+v", "Ctrl+Shift+V (for terminals)"),
+]
+
 # X11 keysym names for the bare modifier keys, used as-is as the whole
 # hotkey string (no "+"-joined combination) — hotkeys.parse_sequence's
 # fallback already passes an unrecognised multi-character key name through
@@ -90,6 +98,7 @@ GENERAL_DEFAULTS = {
     "input_device": "",         # "" = system default input device
     "output_clipboard": True,
     "output_autotype": True,
+    "output_autotype_shortcut": "ctrl+v",  # ctrl+v | ctrl+shift+v (terminals)
     "output_window": True,
     "output_suffix": "",       # appended after every recognized utterance
     "clipboard_hide_history": "temporary",  # temporary | all | none

@@ -14,11 +14,12 @@ _language_override = "system"
 # English wording; both languages therefore need an explicit entry.
 _EN = {
     "X11 hotkey note": "<i>X11: the combination is grabbed by the app directly; a single key is detected from the keyboard state.<br>Wayland: the GlobalShortcuts system portal is used; the compositor may show a confirmation dialog, and single modifier keys are not supported by every compositor.</i>",
-    "Autotype requirements": "X11: requires xdotool.\nWayland: requires wl-clipboard, plus ydotool with a running ydotoold that has access to uinput.\nThe text is pasted with Ctrl+V — terminals usually need Ctrl+Shift+V, so autotype may not work there.\nIf autotype is unavailable, the reason appears in the tray tooltip; the clipboard and history keep working.",
+    "Autotype requirements": "X11: requires xdotool.\nWayland: requires wl-clipboard, plus ydotool with a running ydotoold that has access to uinput.\nThe text is pasted with the shortcut below (Ctrl+V by default) — terminals usually need Ctrl+Shift+V instead.\nIf autotype is unavailable, the reason appears in the tray tooltip; the clipboard and history keep working.",
     "GigaAM chunk note": "GigaAM rejects audio longer than 25 seconds in one call — long recordings are split at the nearest pause. Keep some headroom below 25 seconds (default 20).",
     "GigaAM model note": "<i>The model (~1 GB, cached in ~/.cache/gigaam) loads in the background right after korvoice starts, not on first use, and reloads in the background as soon as the model or device on this tab is changed.</i>",
     "Clipboard history note": "Clipboard managers that honour the “secret” hint (Klipper, CopyQ, cliphist and others) skip text marked this way. Other managers may ignore it. Not available on Wayland: wl-copy can't attach the hint.",
     "Wake word silence note": "How long to wait in silence after speech before auto-stopping a wake-word-triggered recording. Increase if it cuts off too soon; decrease if it waits too long after you're done talking.",
+    "Autotype shortcut note": "Most applications paste with Ctrl+V. Terminals usually bind that differently and expect Ctrl+Shift+V instead — switch to it if autotype does nothing in the window you're dictating into.",
 }
 
 _RU = {
@@ -76,7 +77,10 @@ _RU = {
     "Blank line": "Пустая строка",
     "Custom…": "Свой вариант…",
     "Text appended verbatim": "Текст, добавляемый без изменений",
-    "Autotype requirements": "X11: требуется xdotool.\nWayland: требуются wl-clipboard, а также ydotool и запущенный ydotoold с доступом к uinput.\nТекст вставляется через Ctrl+V — терминалам обычно нужен Ctrl+Shift+V, поэтому в них автовставка может не сработать.\nЕсли автовставка недоступна, причина появится в подсказке трея; буфер обмена и история продолжат работать.",
+    "Autotype requirements": "X11: требуется xdotool.\nWayland: требуются wl-clipboard, а также ydotool и запущенный ydotoold с доступом к uinput.\nТекст вставляется сочетанием клавиш ниже (по умолчанию Ctrl+V) — терминалам обычно нужен Ctrl+Shift+V.\nЕсли автовставка недоступна, причина появится в подсказке трея; буфер обмена и история продолжат работать.",
+    "Paste shortcut:": "Сочетание для вставки:",
+    "Ctrl+Shift+V (for terminals)": "Ctrl+Shift+V (для терминалов)",
+    "Autotype shortcut note": "Большинство приложений вставляют по Ctrl+V. Терминалы обычно назначают это сочетание иначе и ожидают Ctrl+Shift+V — переключитесь на него, если автовставка не срабатывает в нужном окне.",
     "Hide from clipboard history:": "Скрывать от истории буфера:",
     "Only temporary paste text": "Только временный текст вставки",
     "All recognized text": "Весь распознанный текст",

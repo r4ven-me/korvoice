@@ -253,6 +253,21 @@ def test_saving_clipboard_hide_history_persists(config, qapp):
     assert config.get("clipboard_hide_history") == "all"
 
 
+def test_autotype_shortcut_defaults_to_ctrl_v(config, qapp):
+    dialog = SettingsDialog(config)
+    assert dialog.autotype_shortcut_combo.currentData() == "ctrl+v"
+
+
+def test_saving_autotype_shortcut_persists(config, qapp):
+    dialog = SettingsDialog(config)
+    dialog.autotype_shortcut_combo.setCurrentIndex(
+        dialog.autotype_shortcut_combo.findData("ctrl+shift+v"))
+
+    dialog._save()
+
+    assert config.get("output_autotype_shortcut") == "ctrl+shift+v"
+
+
 def test_english_notes_show_text_not_ids(config, qapp):
     set_language("en")
     try:
@@ -260,12 +275,14 @@ def test_english_notes_show_text_not_ids(config, qapp):
         texts = [label.text() for label in dialog.findChildren(QLabel)]
         tooltips = [dialog.output_autotype.toolTip(), dialog.chunk_seconds.toolTip(),
                     dialog.clipboard_hide_combo.toolTip(),
-                    dialog.wake_word_silence_seconds.toolTip()]
+                    dialog.wake_word_silence_seconds.toolTip(),
+                    dialog.autotype_shortcut_combo.toolTip()]
     finally:
         set_language("system")
 
     ids = {"X11 hotkey note", "GigaAM model note", "GigaAM chunk note",
-           "Autotype requirements", "Clipboard history note", "Wake word silence note"}
+           "Autotype requirements", "Clipboard history note", "Wake word silence note",
+           "Autotype shortcut note"}
     assert not ids & set(texts)
     assert not ids & set(tooltips)
     assert any("GlobalShortcuts" in text for text in texts)

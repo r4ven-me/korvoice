@@ -93,6 +93,45 @@ def test_autotype_command_wayland_legacy_ydotool_uses_key_names(config, monkeypa
     assert dispatcher._autotype_command("привет") == ["/usr/bin/ydotool", "key", "ctrl+v"]
 
 
+def test_autotype_command_x11_uses_configured_shift_shortcut(config, monkeypatch):
+    config.set("output_autotype_shortcut", "ctrl+shift+v")
+    monkeypatch.setattr(QGuiApplication, "platformName", staticmethod(lambda: "xcb"))
+    monkeypatch.setattr(
+        shutil, "which", lambda name: f"/usr/bin/{name}" if name == "xdotool" else None
+    )
+    dispatcher = OutputDispatcher(config)
+
+    command = dispatcher._autotype_command("привет")
+
+    assert command == ["/usr/bin/xdotool", "key", "--clearmodifiers", "ctrl+shift+v"]
+
+
+def test_autotype_command_wayland_shift_shortcut_uses_ydotool_keycodes(config, monkeypatch):
+    config.set("output_autotype_shortcut", "ctrl+shift+v")
+    monkeypatch.setattr(QGuiApplication, "platformName", staticmethod(lambda: "wayland"))
+    monkeypatch.setattr(shutil, "which", _which_only("ydotool", "wl-copy", "wl-paste"))
+    monkeypatch.setattr(output_mod, "ydotool_is_legacy", lambda _tool: False)
+    dispatcher = OutputDispatcher(config)
+
+    command = dispatcher._autotype_command("привет")
+
+    assert command == [
+        "/usr/bin/ydotool", "key", "29:1", "42:1", "47:1", "47:0", "42:0", "29:0",
+    ]
+
+
+def test_autotype_command_wayland_legacy_shift_shortcut_uses_key_names(config, monkeypatch):
+    config.set("output_autotype_shortcut", "ctrl+shift+v")
+    monkeypatch.setattr(QGuiApplication, "platformName", staticmethod(lambda: "wayland"))
+    monkeypatch.setattr(shutil, "which", _which_only("ydotool", "wl-copy", "wl-paste"))
+    monkeypatch.setattr(output_mod, "ydotool_is_legacy", lambda _tool: True)
+    dispatcher = OutputDispatcher(config)
+
+    command = dispatcher._autotype_command("привет")
+
+    assert command == ["/usr/bin/ydotool", "key", "ctrl+shift+v"]
+
+
 def test_autotype_command_wayland_missing_wl_clipboard_emits_unavailable(config, monkeypatch):
     monkeypatch.setattr(QGuiApplication, "platformName", staticmethod(lambda: "wayland"))
     monkeypatch.setattr(shutil, "which", _which_only("ydotool"))

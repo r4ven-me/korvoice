@@ -104,6 +104,7 @@ Settings (`~/.config/korvoice/config.yaml`, YAML, written on every change):
 | Max chunk length | 5-24 seconds | `20` |
 | Microphone | any input device PortAudio reports | system default |
 | Output: keep in clipboard / autotype / history window | on/off, independently | all on |
+| Autotype paste shortcut | Ctrl+V / Ctrl+Shift+V (terminals) | Ctrl+V |
 | Text ending | nothing / space / new line / blank line / custom text | nothing |
 | Hide from clipboard history | only temporary paste text / all recognized text / nothing | only temporary paste text |
 | Keep history between restarts | on/off (last 1000 entries) | off |
@@ -131,8 +132,8 @@ scope for this project for now.
 
 ### Autotype
 
-Autotype puts the text in the clipboard and sends a single `Ctrl+V` instead
-of typing it key by key: `xdotool type` handles Cyrillic by repeatedly
+Autotype puts the text in the clipboard and sends a single paste shortcut
+instead of typing it key by key: `xdotool type` handles Cyrillic by repeatedly
 changing the X11 keymap and can freeze the whole desktop, and `ydotool type`
 only knows the US layout, so it can't type Cyrillic at all. Both backends are
 external system tools, not pip dependencies:
@@ -148,8 +149,9 @@ When “keep in clipboard” is off, the previous clipboard contents come back
 right after the paste (on Wayland, one format of them — text preferred —
 since `wl-copy` offers a single type).
 
-Terminals usually paste with `Ctrl+Shift+V`, not `Ctrl+V`, so autotype into
-a terminal may do nothing — use the clipboard output there.
+Terminals usually paste with `Ctrl+Shift+V`, not `Ctrl+V` — if autotype does
+nothing in a terminal, switch Settings → Output → "Paste shortcut" to
+Ctrl+Shift+V (default is Ctrl+V, which most other applications expect).
 
 If the relevant tool isn't set up, autotype fails and the reason shows up in
 the tray tooltip until the next successful autotype — clipboard and the
