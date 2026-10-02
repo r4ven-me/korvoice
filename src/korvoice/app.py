@@ -294,6 +294,7 @@ class KorvoiceApp:
         self._autotype_note = ""
         self._record_started_at = 0.0
         self._transcribe_started_at = 0.0
+        self._wake_word_detected_at = 0.0
 
         theme.apply_theme(app, str(config.get("theme")))
         app.setQuitOnLastWindowClosed(False)
@@ -517,6 +518,9 @@ class KorvoiceApp:
             return
         self.state = "recording"
         self._record_started_at = time.monotonic()
+        if auto_stop:
+            log.debug("wake word -> recording started in %.3fs",
+                      self._record_started_at - self._wake_word_detected_at)
         self._update_tray_visuals()
 
     def _stop_recording(self) -> None:
@@ -571,6 +575,7 @@ class KorvoiceApp:
             self.wake_word.start_listening()
 
     def _on_wake_word_detected(self) -> None:
+        self._wake_word_detected_at = time.monotonic()
         log.debug("wake word detected")
         if self.config.get("wake_word_sound_enabled"):
             sound.play_wake_word_started()

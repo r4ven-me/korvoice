@@ -135,6 +135,7 @@ def test_start_recording_auto_stop_wires_silence_watcher(config):
     app.wake_word = FakeWakeWord()
     app.recorder = recorder
     app._wake_word_silence_watcher = watcher
+    app._wake_word_detected_at = 0.0
     app._resolve_input_device = lambda: None
     app._update_tray_visuals = lambda: None
 

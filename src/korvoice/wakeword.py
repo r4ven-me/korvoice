@@ -37,7 +37,9 @@ DATA_DIR = Path(os.environ.get("XDG_DATA_HOME", str(Path.home() / ".local" / "sh
 DEFAULT_MODEL_DIR = DATA_DIR / "korvoice" / "vosk-model-small-ru"
 MODEL_DOWNLOAD_URL = "https://alphacephei.com/vosk/models/vosk-model-small-ru-0.22.zip"
 
-_BLOCK_SECONDS = 0.2  # read granularity while listening
+_BLOCK_SECONDS = 0.05  # read granularity while listening — lower = quicker
+                       # to notice a finished phrase, at the cost of more
+                       # (still cheap) AcceptWaveform calls per second
 
 
 def _normalize(phrase: str) -> str:
@@ -188,6 +190,7 @@ class _VoskListenWorker(QThread):
                     return
                 if recognizer.AcceptWaveform(data.tobytes()):
                     text = _normalize(json.loads(recognizer.Result()).get("text", ""))
+                    log.debug("vosk finalized recognition: %r", text)
                     if text == self._phrase:
                         self.detected.emit()
                         return
