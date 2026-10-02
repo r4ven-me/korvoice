@@ -215,6 +215,10 @@ class SettingsDialog(QDialog):
         self.wake_word_silence_seconds.setToolTip(tr("Wake word silence note"))
         form.addRow(tr("Silence before auto-stop, s:"), self.wake_word_silence_seconds)
 
+        self.wake_word_sound_enabled = QCheckBox(tr("Play a sound on start/auto-stop"))
+        self.wake_word_sound_enabled.setChecked(bool(self.config.get("wake_word_sound_enabled")))
+        form.addRow("", self.wake_word_sound_enabled)
+
         self.wake_word_status = QLabel(self._wake_word_status_text())
         self.wake_word_status.setWordWrap(True)
         form.addRow("", self.wake_word_status)
@@ -242,6 +246,7 @@ class SettingsDialog(QDialog):
     def _wake_word_enabled_changed(self, checked: bool) -> None:
         self.wake_word_phrase.setEnabled(checked)
         self.wake_word_silence_seconds.setEnabled(checked)
+        self.wake_word_sound_enabled.setEnabled(checked)
 
     # -- "Output" tab ------------------------------------------------------------
 
@@ -410,6 +415,7 @@ class SettingsDialog(QDialog):
         self.config.set("wake_word_enabled", wake_word_enabled)
         self.config.set("wake_word_phrase", wake_word_phrase)
         self.config.set("wake_word_silence_seconds", self.wake_word_silence_seconds.value())
+        self.config.set("wake_word_sound_enabled", self.wake_word_sound_enabled.isChecked())
         self.config.set_hotkey("record", sequence)
 
         try:

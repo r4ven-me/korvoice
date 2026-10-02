@@ -101,6 +101,7 @@ GENERAL_DEFAULTS = {
     # the recording. 1.2s survives a normal mid-sentence pause without
     # feeling like a stuck mic once the user is actually done talking.
     "wake_word_silence_seconds": 1.2,
+    "wake_word_sound_enabled": True,  # beep on wake-word start/auto-stop
 }
 
 HOTKEY_DEFAULTS = {

@@ -30,7 +30,7 @@ from PySide6.QtGui import QAction, QActionGroup, QGuiApplication
 from PySide6.QtNetwork import QLocalServer, QLocalSocket
 from PySide6.QtWidgets import QApplication, QMenu, QSystemTrayIcon
 
-from . import __version__, theme, wakeword
+from . import __version__, sound, theme, wakeword
 from .asr import Engine
 from .audio import MIN_TRANSCRIBE_SAMPLES, SAMPLE_RATE, Recorder, list_input_devices
 from .config import Config
@@ -310,7 +310,8 @@ class KorvoiceApp:
         self.wake_word.status_changed.connect(self._on_wake_word_status)
         self._wake_word_status = ""
         self._wake_word_silence_watcher = WakeWordSilenceWatcher()
-        self._wake_word_silence_watcher.silence_detected.connect(self._stop_recording)
+        self._wake_word_silence_watcher.silence_detected.connect(
+            self._on_wake_word_silence_timeout)
 
         self.output = OutputDispatcher(config)
         self.output.delivered.connect(self._on_output_window)
@@ -571,7 +572,14 @@ class KorvoiceApp:
 
     def _on_wake_word_detected(self) -> None:
         log.debug("wake word detected")
+        if self.config.get("wake_word_sound_enabled"):
+            sound.play_wake_word_started()
         self._start_recording(auto_stop=True)
+
+    def _on_wake_word_silence_timeout(self) -> None:
+        if self.config.get("wake_word_sound_enabled"):
+            sound.play_wake_word_stopped()
+        self._stop_recording()
 
     def _on_wake_word_status(self, status: str) -> None:
         self._wake_word_status = status

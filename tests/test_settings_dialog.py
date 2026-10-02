@@ -166,11 +166,13 @@ def test_wake_word_phrase_disabled_until_checkbox_checked(config, qapp):
     assert not dialog.wake_word_enabled.isChecked()
     assert not dialog.wake_word_phrase.isEnabled()
     assert not dialog.wake_word_silence_seconds.isEnabled()
+    assert not dialog.wake_word_sound_enabled.isEnabled()
 
     dialog.wake_word_enabled.setChecked(True)
 
     assert dialog.wake_word_phrase.isEnabled()
     assert dialog.wake_word_silence_seconds.isEnabled()
+    assert dialog.wake_word_sound_enabled.isEnabled()
 
 
 def test_saving_wake_word_settings_persists(config, qapp, monkeypatch):
@@ -179,12 +181,14 @@ def test_saving_wake_word_settings_persists(config, qapp, monkeypatch):
     dialog.wake_word_enabled.setChecked(True)
     dialog.wake_word_phrase.setText("привет корвойс")
     dialog.wake_word_silence_seconds.setValue(2.3)
+    dialog.wake_word_sound_enabled.setChecked(False)
 
     dialog._save()
 
     assert config.get("wake_word_enabled") is True
     assert config.get("wake_word_phrase") == "привет корвойс"
     assert config.get("wake_word_silence_seconds") == pytest.approx(2.3)
+    assert config.get("wake_word_sound_enabled") is False
 
 
 def test_saving_wake_word_enabled_without_phrase_warns_but_saves(config, qapp, monkeypatch):

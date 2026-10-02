@@ -201,14 +201,60 @@ def test_maybe_start_wake_word_listening_noop_when_not_idle(config):
     assert calls == []
 
 
-def test_wake_word_detected_triggers_start_recording_with_auto_stop():
+def test_wake_word_detected_triggers_start_recording_with_auto_stop(config, monkeypatch):
+    config.set("wake_word_sound_enabled", False)
     app = cast(Any, KorvoiceApp.__new__(KorvoiceApp))
+    app.config = config
     calls = []
     app._start_recording = lambda auto_stop=False: calls.append(auto_stop)
+    sound_calls = []
+    monkeypatch.setattr(app_mod.sound, "play_wake_word_started", lambda: sound_calls.append(True))
 
     app._on_wake_word_detected()
 
     assert calls == [True]
+    assert sound_calls == []  # sound disabled
+
+
+def test_wake_word_detected_plays_sound_when_enabled(config, monkeypatch):
+    config.set("wake_word_sound_enabled", True)
+    app = cast(Any, KorvoiceApp.__new__(KorvoiceApp))
+    app.config = config
+    app._start_recording = lambda auto_stop=False: None
+    sound_calls = []
+    monkeypatch.setattr(app_mod.sound, "play_wake_word_started", lambda: sound_calls.append(True))
+
+    app._on_wake_word_detected()
+
+    assert sound_calls == [True]
+
+
+def test_wake_word_silence_timeout_stops_recording(config, monkeypatch):
+    config.set("wake_word_sound_enabled", False)
+    app = cast(Any, KorvoiceApp.__new__(KorvoiceApp))
+    app.config = config
+    calls = []
+    app._stop_recording = lambda: calls.append(True)
+    sound_calls = []
+    monkeypatch.setattr(app_mod.sound, "play_wake_word_stopped", lambda: sound_calls.append(True))
+
+    app._on_wake_word_silence_timeout()
+
+    assert calls == [True]
+    assert sound_calls == []  # sound disabled
+
+
+def test_wake_word_silence_timeout_plays_sound_when_enabled(config, monkeypatch):
+    config.set("wake_word_sound_enabled", True)
+    app = cast(Any, KorvoiceApp.__new__(KorvoiceApp))
+    app.config = config
+    app._stop_recording = lambda: None
+    sound_calls = []
+    monkeypatch.setattr(app_mod.sound, "play_wake_word_stopped", lambda: sound_calls.append(True))
+
+    app._on_wake_word_silence_timeout()
+
+    assert sound_calls == [True]
 
 
 def test_default_is_daemon():

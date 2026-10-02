@@ -111,6 +111,7 @@ Settings (`~/.config/korvoice/config.yaml`, YAML, written on every change):
 | Wake word enabled | on/off | off |
 | Wake phrase | free text (Russian phrase) | empty |
 | Silence before auto-stop (wake word) | 0.3–5.0 seconds | 1.2 |
+| Wake word start/stop sound | on/off | on |
 
 ### GPU acceleration
 
@@ -185,6 +186,13 @@ before you're done speaking, or waits too long after you've finished,
 adjust Settings → General → "Silence before auto-stop, s:" (default 1.2s).
 This only affects wake-word recordings; push-to-talk/toggle still stop on
 hotkey release/press.
+
+Since there's no physical key press to confirm a wake-word-triggered
+recording the way the hotkey has, korvoice can also play a short beep on
+start and a different one on auto-stop — "Play a sound on start/auto-stop"
+in Settings (on by default). Besides general feedback, it's useful for
+telling whether auto-stop is actually firing promptly if a recording ever
+seems to run longer than expected.
 
 ### Clipboard managers
 
