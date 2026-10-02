@@ -49,6 +49,14 @@ class Recorder:
         self._on_chunk: Callable[[np.ndarray], None] | None = None
         self.used_default_fallback = False
 
+    @property
+    def samplerate(self) -> int:
+        """The actual sample rate the current/most recent stream opened at
+        (resolved inside start()). Lets on_chunk callers (e.g. the
+        wake-word silence watcher) convert chunk sample counts to real
+        seconds without duplicating resolve_samplerate()."""
+        return self._samplerate
+
     def _resolve_samplerate(self) -> int:
         """The device's own default rate — sd.query_devices()'s `kind`
         parameter only applies when `device` is unset (falls back to the

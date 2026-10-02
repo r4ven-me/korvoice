@@ -97,6 +97,10 @@ GENERAL_DEFAULTS = {
     "history_persistent": False,
     "wake_word_enabled": False,  # listen continuously for wake_word_phrase while idle
     "wake_word_phrase": "",      # free-text Russian phrase, e.g. "привет корвойс"
+    # Trailing silence after wake-word-triggered speech before auto-stopping
+    # the recording. 1.2s survives a normal mid-sentence pause without
+    # feeling like a stuck mic once the user is actually done talking.
+    "wake_word_silence_seconds": 1.2,
 }
 
 HOTKEY_DEFAULTS = {
@@ -149,6 +153,11 @@ class Config:
         if isinstance(default, int):
             try:
                 return int(value)
+            except (TypeError, ValueError):
+                return default
+        if isinstance(default, float):
+            try:
+                return float(value)
             except (TypeError, ValueError):
                 return default
         return value

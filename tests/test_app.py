@@ -101,9 +101,11 @@ def test_start_recording_stops_wake_word_listening_first(config):
 
 
 def test_start_recording_auto_stop_wires_silence_watcher(config):
+    config.set("wake_word_silence_seconds", 2.0)
     app = cast(Any, KorvoiceApp.__new__(KorvoiceApp))
     app.config = config
     app.state = "idle"
+    calls = []
 
     class FakeWakeWord:
         def stop_listening(self):
@@ -112,15 +114,18 @@ def test_start_recording_auto_stop_wires_silence_watcher(config):
     class FakeRecorder:
         used_default_fallback = False
         on_chunk = "unset"
+        samplerate = 48000
 
         def start(self, on_chunk=None):
             self.on_chunk = on_chunk
+            calls.append("recorder_start")
 
     class FakeWatcher:
-        reset_called = False
+        reset_args = None
 
-        def reset(self):
-            self.reset_called = True
+        def reset(self, samplerate, required_silence_seconds):
+            self.reset_args = (samplerate, required_silence_seconds)
+            calls.append("watcher_reset")
 
         def feed(self, chunk):
             pass
@@ -135,7 +140,10 @@ def test_start_recording_auto_stop_wires_silence_watcher(config):
 
     app._start_recording(auto_stop=True)
 
-    assert watcher.reset_called is True
+    # reset() must come after recorder.start() — only then is
+    # recorder.samplerate the real, resolved rate for this session.
+    assert calls == ["recorder_start", "watcher_reset"]
+    assert watcher.reset_args == (48000, 2.0)
     assert recorder.on_chunk == watcher.feed
 
 

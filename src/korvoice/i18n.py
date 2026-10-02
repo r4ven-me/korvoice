@@ -18,6 +18,7 @@ _EN = {
     "GigaAM chunk note": "GigaAM rejects audio longer than 25 seconds in one call — long recordings are split at the nearest pause. Keep some headroom below 25 seconds (default 20).",
     "GigaAM model note": "<i>The model (~1 GB, cached in ~/.cache/gigaam) loads in the background right after korvoice starts, not on first use, and reloads in the background as soon as the model or device on this tab is changed.</i>",
     "Clipboard history note": "Clipboard managers that honour the “secret” hint (Klipper, CopyQ, cliphist and others) skip text marked this way. Other managers may ignore it. Not available on Wayland: wl-copy can't attach the hint.",
+    "Wake word silence note": "How long to wait in silence after speech before auto-stopping a wake-word-triggered recording. Increase if it cuts off too soon; decrease if it waits too long after you're done talking.",
 }
 
 _RU = {
@@ -129,6 +130,11 @@ _RU = {
     "v3 RNNT (no punctuation)": "v3 RNNT (без пунктуации)",
     "Enable wake word": "Включить кодовое слово",
     "Wake phrase:": "Кодовая фраза:",
+    "Silence before auto-stop, s:": "Тишина перед автостопом, с:",
+    "Wake word silence note": "Сколько тишины нужно услышать после речи, прежде чем "
+    "автоматически остановить запись, запущенную кодовым словом. Увеличьте, если запись "
+    "обрывается слишком быстро; уменьшите, если она ждёт слишком долго после того, как вы "
+    "закончили говорить.",
     "e.g. привет корвойс": "например, привет корвойс",
     "Wake-word model found.": "Модель кодового слова найдена.",
     "Wake-word model not downloaded yet — fetched automatically "

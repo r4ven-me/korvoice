@@ -45,6 +45,12 @@ def test_get_coerces_bool_type(config):
     assert config.get("output_window") is False
 
 
+def test_get_coerces_float_type(config):
+    config.set("wake_word_silence_seconds", "1.5")
+    assert config.get("wake_word_silence_seconds") == 1.5
+    assert isinstance(config.get("wake_word_silence_seconds"), float)
+
+
 def test_broken_yaml_falls_back_to_defaults(config_dir):
     (config_dir / "config.yaml").write_text("not: valid: yaml: [", encoding="utf-8")
     config = Config()

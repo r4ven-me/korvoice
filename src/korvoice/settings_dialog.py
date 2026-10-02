@@ -16,6 +16,7 @@ from PySide6.QtWidgets import (
     QComboBox,
     QDialog,
     QDialogButtonBox,
+    QDoubleSpinBox,
     QFormLayout,
     QHBoxLayout,
     QKeySequenceEdit,
@@ -205,6 +206,15 @@ class SettingsDialog(QDialog):
         self.wake_word_phrase.setPlaceholderText(tr("e.g. привет корвойс"))
         form.addRow(tr("Wake phrase:"), self.wake_word_phrase)
 
+        self.wake_word_silence_seconds = QDoubleSpinBox()
+        self.wake_word_silence_seconds.setRange(0.3, 5.0)
+        self.wake_word_silence_seconds.setSingleStep(0.1)
+        self.wake_word_silence_seconds.setDecimals(1)
+        self.wake_word_silence_seconds.setValue(
+            float(self.config.get("wake_word_silence_seconds")))
+        self.wake_word_silence_seconds.setToolTip(tr("Wake word silence note"))
+        form.addRow(tr("Silence before auto-stop, s:"), self.wake_word_silence_seconds)
+
         self.wake_word_status = QLabel(self._wake_word_status_text())
         self.wake_word_status.setWordWrap(True)
         form.addRow("", self.wake_word_status)
@@ -231,6 +241,7 @@ class SettingsDialog(QDialog):
 
     def _wake_word_enabled_changed(self, checked: bool) -> None:
         self.wake_word_phrase.setEnabled(checked)
+        self.wake_word_silence_seconds.setEnabled(checked)
 
     # -- "Output" tab ------------------------------------------------------------
 
@@ -398,6 +409,7 @@ class SettingsDialog(QDialog):
         self.config.set("input_device", self.input_device_combo.currentData())
         self.config.set("wake_word_enabled", wake_word_enabled)
         self.config.set("wake_word_phrase", wake_word_phrase)
+        self.config.set("wake_word_silence_seconds", self.wake_word_silence_seconds.value())
         self.config.set_hotkey("record", sequence)
 
         try:

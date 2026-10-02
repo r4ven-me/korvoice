@@ -14,6 +14,23 @@ class _FakeStream:
         return None
 
 
+def test_samplerate_defaults_to_sample_rate_before_start():
+    recorder = Recorder()
+    assert recorder.samplerate == SAMPLE_RATE
+
+
+def test_samplerate_reflects_resolved_rate_after_start(monkeypatch):
+    monkeypatch.setattr(
+        audio_mod.sd, "query_devices", lambda *args, **kwargs: {"default_samplerate": 48000}
+    )
+    monkeypatch.setattr(audio_mod.sd, "InputStream", lambda **kwargs: _FakeStream())
+    recorder = Recorder()
+
+    recorder.start()
+
+    assert recorder.samplerate == 48000
+
+
 def test_start_wires_on_chunk_hook(monkeypatch):
     monkeypatch.setattr(
         audio_mod.sd, "query_devices", lambda *args, **kwargs: {"default_samplerate": 16000}

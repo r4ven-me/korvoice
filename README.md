@@ -110,6 +110,7 @@ Settings (`~/.config/korvoice/config.yaml`, YAML, written on every change):
 | Autostart at login | on/off | off |
 | Wake word enabled | on/off | off |
 | Wake phrase | free text (Russian phrase) | empty |
+| Silence before auto-stop (wake word) | 0.3–5.0 seconds | 1.2 |
 
 ### GPU acceleration
 
@@ -177,6 +178,13 @@ one. The tray tooltip shows "downloading…" then "loading…" the first time,
 before switching to "listening". `korvoice --check` reports whether `vosk`
 itself is installed (the one thing it can't fix automatically) and whether
 the model has been downloaded yet.
+
+Since there's no hotkey release to key off of, a wake-word-triggered
+recording auto-stops after a trailing silence instead — if it cuts off
+before you're done speaking, or waits too long after you've finished,
+adjust Settings → General → "Silence before auto-stop, s:" (default 1.2s).
+This only affects wake-word recordings; push-to-talk/toggle still stop on
+hotkey release/press.
 
 ### Clipboard managers
 

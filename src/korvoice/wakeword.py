@@ -28,7 +28,7 @@ import numpy as np
 import sounddevice as sd
 from PySide6.QtCore import QObject, QThread, Signal
 
-from .audio import resolve_samplerate
+from .audio import SAMPLE_RATE, resolve_samplerate
 from .config import Config
 
 log = logging.getLogger(__name__)
@@ -283,36 +283,54 @@ class WakeWordSilenceWatcher(QObject):
     Recorder's on_chunk hook, which runs on sounddevice's own callback
     thread; this object is constructed on the main thread, so Qt
     auto-queues delivery of `silence_detected` there (the same cross-thread
-    mechanism already relied on for GlobalHotkeys.activated)."""
+    mechanism already relied on for GlobalHotkeys.activated).
+
+    Tracks elapsed seconds, not chunk counts: sounddevice.InputStream's
+    buffer size isn't fixed (no explicit blocksize= is passed when opening
+    it), so a fixed number of chunks can be a wildly different amount of
+    real time depending on what PortAudio picks — confirmed live as the
+    cause of auto-stop firing after well under a second of actual
+    silence."""
 
     silence_detected = Signal()
 
-    def __init__(self, threshold: float = 0.015, min_speech_chunks: int = 3,
-                 required_low_chunks: int = 12, parent=None) -> None:
+    def __init__(self, threshold: float = 0.015, min_speech_seconds: float = 0.3,
+                 required_silence_seconds: float = 1.2, samplerate: int = SAMPLE_RATE,
+                 parent=None) -> None:
         super().__init__(parent)
         self._threshold = threshold
-        self._min_speech_chunks = min_speech_chunks
-        self._required_low_chunks = required_low_chunks
-        self._speech_seen = 0
-        self._low_run = 0
+        self._min_speech_seconds = min_speech_seconds
+        self._required_silence_seconds = required_silence_seconds
+        self._samplerate = samplerate
+        self._speech_seconds = 0.0
+        self._low_seconds = 0.0
         self._done = False
 
-    def reset(self) -> None:
-        self._speech_seen = 0
-        self._low_run = 0
+    def reset(self, samplerate: int, required_silence_seconds: float) -> None:
+        """Called once per wake-word-triggered recording — after
+        Recorder.start() has resolved this session's real device sample
+        rate, not before (feed() needs the current rate to convert chunk
+        sizes to seconds correctly). required_silence_seconds is read from
+        config at this point, so a Settings change takes effect on the
+        very next wake-word recording."""
+        self._samplerate = samplerate
+        self._required_silence_seconds = required_silence_seconds
+        self._speech_seconds = 0.0
+        self._low_seconds = 0.0
         self._done = False
 
     def feed(self, chunk: np.ndarray) -> None:
         if self._done or chunk.size == 0:
             return
+        duration = chunk.size / self._samplerate
         rms = float(np.sqrt(np.mean(chunk.astype(np.float64) ** 2)))
         if rms >= self._threshold:
-            self._speech_seen += 1
-            self._low_run = 0
+            self._speech_seconds += duration
+            self._low_seconds = 0.0
             return
-        if self._speech_seen < self._min_speech_chunks:
+        if self._speech_seconds < self._min_speech_seconds:
             return
-        self._low_run += 1
-        if self._low_run >= self._required_low_chunks:
+        self._low_seconds += duration
+        if self._low_seconds >= self._required_silence_seconds:
             self._done = True
             self.silence_detected.emit()

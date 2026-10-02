@@ -490,11 +490,16 @@ class KorvoiceApp:
         self.wake_word.stop_listening()
         try:
             self.recorder.device = self._resolve_input_device()
-            on_chunk = None
-            if auto_stop:
-                self._wake_word_silence_watcher.reset()
-                on_chunk = self._wake_word_silence_watcher.feed
+            on_chunk = self._wake_word_silence_watcher.feed if auto_stop else None
             self.recorder.start(on_chunk=on_chunk)
+            if auto_stop:
+                # Must come after start(): only then is recorder.samplerate
+                # the real, resolved rate for *this* session (a device
+                # fallback inside start() can change it from last time).
+                self._wake_word_silence_watcher.reset(
+                    samplerate=self.recorder.samplerate,
+                    required_silence_seconds=float(self.config.get("wake_word_silence_seconds")),
+                )
             if self.recorder.used_default_fallback:
                 self.config.set("input_device", "")
                 self.tray.showMessage(

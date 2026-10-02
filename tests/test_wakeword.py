@@ -274,67 +274,102 @@ def test_download_and_extract_model_does_not_leave_partial_state_on_bad_zip(tmp_
 
 # -- WakeWordSilenceWatcher -----------------------------------------------------
 
-
-def _loud_chunk(n=320):
-    return np.full(n, 0.5, dtype=np.float32)
-
-
-def _quiet_chunk(n=320):
-    return np.zeros(n, dtype=np.float32)
+# A contrived samplerate (1000) so 1 sample = 1ms and chunk durations are
+# trivial to reason about in seconds.
+_WATCHER_SR = 1000
 
 
-def test_silence_watcher_fires_after_speech_then_enough_quiet_chunks(qapp):
-    watcher = WakeWordSilenceWatcher(threshold=0.1, min_speech_chunks=2, required_low_chunks=3)
+def _loud(seconds, samplerate=_WATCHER_SR):
+    return np.full(int(seconds * samplerate), 0.5, dtype=np.float32)
+
+
+def _quiet(seconds, samplerate=_WATCHER_SR):
+    return np.zeros(int(seconds * samplerate), dtype=np.float32)
+
+
+def test_silence_watcher_fires_after_speech_then_enough_quiet_time(qapp):
+    watcher = WakeWordSilenceWatcher(threshold=0.1, min_speech_seconds=0.2,
+                                      required_silence_seconds=0.3, samplerate=_WATCHER_SR)
     events = []
     watcher.silence_detected.connect(lambda: events.append(True))
 
-    for _ in range(2):
-        watcher.feed(_loud_chunk())
-    for _ in range(2):
-        watcher.feed(_quiet_chunk())
-    assert events == []  # not enough quiet chunks yet
-    watcher.feed(_quiet_chunk())
+    watcher.feed(_loud(0.1))
+    watcher.feed(_loud(0.1))  # 0.2s speech total — meets min_speech_seconds
+    watcher.feed(_quiet(0.25))
+    assert events == []  # not enough silence yet
+    watcher.feed(_quiet(0.1))  # 0.35s silence total — over the 0.3s threshold
     assert events == [True]
 
 
 def test_silence_watcher_does_not_fire_before_minimum_speech_seen(qapp):
-    watcher = WakeWordSilenceWatcher(threshold=0.1, min_speech_chunks=3, required_low_chunks=2)
+    watcher = WakeWordSilenceWatcher(threshold=0.1, min_speech_seconds=0.3,
+                                      required_silence_seconds=0.2, samplerate=_WATCHER_SR)
     events = []
     watcher.silence_detected.connect(lambda: events.append(True))
 
-    watcher.feed(_loud_chunk())  # only 1 speech chunk, below min_speech_chunks
-    for _ in range(5):
-        watcher.feed(_quiet_chunk())
+    watcher.feed(_loud(0.1))  # below min_speech_seconds (0.3s)
+    watcher.feed(_quiet(1.0))  # plenty of silence, but speech requirement never met
 
     assert events == []
 
 
 def test_silence_watcher_fires_only_once(qapp):
-    watcher = WakeWordSilenceWatcher(threshold=0.1, min_speech_chunks=1, required_low_chunks=2)
+    watcher = WakeWordSilenceWatcher(threshold=0.1, min_speech_seconds=0.1,
+                                      required_silence_seconds=0.2, samplerate=_WATCHER_SR)
     events = []
     watcher.silence_detected.connect(lambda: events.append(True))
 
-    watcher.feed(_loud_chunk())
-    for _ in range(5):
-        watcher.feed(_quiet_chunk())
+    watcher.feed(_loud(0.1))
+    watcher.feed(_quiet(1.0))  # far more silence than required — still fires once
 
     assert events == [True]
 
 
 def test_silence_watcher_reset_allows_firing_again(qapp):
-    watcher = WakeWordSilenceWatcher(threshold=0.1, min_speech_chunks=1, required_low_chunks=2)
+    watcher = WakeWordSilenceWatcher(threshold=0.1, min_speech_seconds=0.1,
+                                      required_silence_seconds=0.2, samplerate=_WATCHER_SR)
     events = []
     watcher.silence_detected.connect(lambda: events.append(True))
-    watcher.feed(_loud_chunk())
-    for _ in range(2):
-        watcher.feed(_quiet_chunk())
+    watcher.feed(_loud(0.1))
+    watcher.feed(_quiet(0.2))
     assert events == [True]
 
-    watcher.reset()
-    watcher.feed(_loud_chunk())
-    for _ in range(2):
-        watcher.feed(_quiet_chunk())
+    watcher.reset(samplerate=_WATCHER_SR, required_silence_seconds=0.2)
+    watcher.feed(_loud(0.1))
+    watcher.feed(_quiet(0.2))
 
+    assert events == [True, True]
+
+
+def test_silence_watcher_uses_configured_samplerate_not_chunk_count(qapp):
+    """Regression test for the original bug: auto-stop used to count raw
+    callback chunks, not elapsed time, so it fired after far less than a
+    second of real silence whenever PortAudio picked a small buffer size.
+    Feeding the exact same fixed-size chunks at two different configured
+    samplerates must yield different numbers of chunks-to-fire — proving
+    the result now depends on duration, not chunk count."""
+    watcher = WakeWordSilenceWatcher(threshold=0.1, min_speech_seconds=0.05)
+    events = []
+    watcher.silence_detected.connect(lambda: events.append(True))
+    loud = np.full(500, 0.5, dtype=np.float32)
+    quiet = np.full(500, 0.0, dtype=np.float32)  # same raw chunk every time
+
+    # High samplerate: 500 samples is a short real-time slice (0.05s) —
+    # several repeats are needed to reach the 0.3s silence threshold.
+    watcher.reset(samplerate=10000, required_silence_seconds=0.3)
+    watcher.feed(loud)
+    for _ in range(5):  # 5 * 0.05s = 0.25s — not enough yet
+        watcher.feed(quiet)
+    assert events == []
+    watcher.feed(quiet)  # 0.3s total — fires
+    assert events == [True]
+
+    # Same chunk, low samplerate: 500 samples is now a much longer
+    # real-time slice (0.5s) — a single chunk already crosses the same
+    # 0.3s threshold.
+    watcher.reset(samplerate=1000, required_silence_seconds=0.3)
+    watcher.feed(loud)
+    watcher.feed(quiet)
     assert events == [True, True]
 
 
