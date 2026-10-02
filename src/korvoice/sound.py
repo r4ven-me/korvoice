@@ -1,6 +1,6 @@
-"""Short synthesized beeps for wake-word start/stop feedback — no audio
-asset files, just a sine tone played through sounddevice's output
-stream."""
+"""Short synthesized chimes for wake-word start/stop feedback — no audio
+asset files, just a couple of sine-wave notes played through
+sounddevice's output stream."""
 
 from __future__ import annotations
 
@@ -12,31 +12,43 @@ import sounddevice as sd
 log = logging.getLogger(__name__)
 
 _SAMPLE_RATE = 16000
-_FADE_SECONDS = 0.01  # avoids an audible click at tone start/end
 
 
-def _tone(frequency: float, duration: float) -> np.ndarray:
+def _note(frequency: float, duration: float) -> np.ndarray:
+    """A single bell-like note: fundamental plus a quiet octave overtone,
+    with a soft attack and an exponential decay — reads as a gentle chime
+    rather than a flat, harsh beep."""
     t = np.linspace(0, duration, int(duration * _SAMPLE_RATE), endpoint=False)
-    wave = 0.2 * np.sin(2 * np.pi * frequency * t).astype(np.float32)
-    fade = min(max(1, int(_FADE_SECONDS * _SAMPLE_RATE)), len(wave) // 2)
-    envelope = np.ones(len(wave), dtype=np.float32)
-    envelope[:fade] = np.linspace(0, 1, fade, dtype=np.float32)
-    envelope[-fade:] = np.linspace(1, 0, fade, dtype=np.float32)
-    return wave * envelope
+    wave = np.sin(2 * np.pi * frequency * t) + 0.3 * np.sin(2 * np.pi * frequency * 2 * t)
+    decay = np.exp(-t * (6.0 / duration))
+    attack = max(1, int(0.003 * _SAMPLE_RATE))
+    envelope = decay.copy()
+    envelope[:attack] *= np.linspace(0, 1, attack)
+    return (0.18 * wave * envelope).astype(np.float32)
+
+
+def _chime(frequencies: list[float], note_duration: float = 0.09, gap: float = 0.03) -> np.ndarray:
+    silence = np.zeros(int(gap * _SAMPLE_RATE), dtype=np.float32)
+    parts: list[np.ndarray] = []
+    for i, frequency in enumerate(frequencies):
+        parts.append(_note(frequency, note_duration))
+        if i < len(frequencies) - 1:
+            parts.append(silence)
+    return np.concatenate(parts)
 
 
 def _play(samples: np.ndarray) -> None:
     try:
         sd.play(samples, _SAMPLE_RATE)
-    except Exception as exc:  # noqa: BLE001 — a failed beep must not break recording
+    except Exception as exc:  # noqa: BLE001 — a failed chime must not break recording
         log.debug("could not play notification sound: %s", exc)
 
 
 def play_wake_word_started() -> None:
-    """Higher, shorter tone — "the wake phrase matched, recording"."""
-    _play(_tone(880.0, 0.1))
+    """Rising two-note chime — "the wake phrase matched, recording"."""
+    _play(_chime([660.0, 880.0]))
 
 
 def play_wake_word_stopped() -> None:
-    """Lower, longer tone — "auto-stopped on trailing silence"."""
-    _play(_tone(440.0, 0.15))
+    """Falling two-note chime — "auto-stopped on trailing silence"."""
+    _play(_chime([660.0, 440.0]))
