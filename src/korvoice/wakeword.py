@@ -190,7 +190,6 @@ class _VoskListenWorker(QThread):
                     return
                 if recognizer.AcceptWaveform(data.tobytes()):
                     text = _normalize(json.loads(recognizer.Result()).get("text", ""))
-                    log.debug("vosk finalized recognition: %r", text)
                     if text == self._phrase:
                         self.detected.emit()
                         return
