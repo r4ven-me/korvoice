@@ -60,7 +60,7 @@ CLIPBOARD_HISTORY_CHOICES = [
 # Ctrl+Shift+V instead.
 AUTOTYPE_SHORTCUT_CHOICES = [
     ("ctrl+v", "Ctrl+V"),
-    ("ctrl+shift+v", "Ctrl+Shift+V (for terminals)"),
+    ("ctrl+shift+v", "Ctrl+Shift+V"),
 ]
 
 # X11 keysym names for the bare modifier keys, used as-is as the whole
@@ -98,7 +98,7 @@ GENERAL_DEFAULTS = {
     "input_device": "",         # "" = system default input device
     "output_clipboard": True,
     "output_autotype": True,
-    "output_autotype_shortcut": "ctrl+v",  # ctrl+v | ctrl+shift+v (terminals)
+    "output_autotype_shortcut": "ctrl+v",  # ctrl+v | ctrl+shift+v
     "output_window": True,
     "output_suffix": "",       # appended after every recognized utterance
     "clipboard_hide_history": "temporary",  # temporary | all | none

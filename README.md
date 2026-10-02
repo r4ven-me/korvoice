@@ -104,7 +104,7 @@ Settings (`~/.config/korvoice/config.yaml`, YAML, written on every change):
 | Max chunk length | 5-24 seconds | `20` |
 | Microphone | any input device PortAudio reports | system default |
 | Output: keep in clipboard / autotype / history window | on/off, independently | all on |
-| Autotype paste shortcut | Ctrl+V / Ctrl+Shift+V (terminals) | Ctrl+V |
+| Autotype paste shortcut | Ctrl+V / Ctrl+Shift+V | Ctrl+V |
 | Text ending | nothing / space / new line / blank line / custom text | nothing |
 | Hide from clipboard history | only temporary paste text / all recognized text / nothing | only temporary paste text |
 | Keep history between restarts | on/off (last 1000 entries) | off |
