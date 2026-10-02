@@ -171,7 +171,7 @@ def test_wake_word_phrase_disabled_until_checkbox_checked(config, qapp):
 
 
 def test_saving_wake_word_settings_persists(config, qapp, monkeypatch):
-    monkeypatch.setattr(settings_dialog_mod, "wake_word_availability", lambda: (True, ""))
+    monkeypatch.setattr(settings_dialog_mod, "vosk_importable", lambda: (True, ""))
     dialog = SettingsDialog(config)
     dialog.wake_word_enabled.setChecked(True)
     dialog.wake_word_phrase.setText("привет корвойс")
@@ -195,15 +195,37 @@ def test_saving_wake_word_enabled_without_phrase_warns_but_saves(config, qapp, m
     assert config.get("wake_word_phrase") == ""
 
 
-def test_wake_word_status_label_reports_unavailable(config, qapp, monkeypatch):
+def test_wake_word_status_label_reports_vosk_unavailable(config, qapp, monkeypatch):
     set_language("en")
     monkeypatch.setattr(
-        settings_dialog_mod, "wake_word_availability", lambda: (False, "model not found at X")
+        settings_dialog_mod, "vosk_importable", lambda: (False, "vosk not installed")
     )
 
     dialog = SettingsDialog(config)
 
-    assert "model not found at X" in dialog.wake_word_status.text()
+    assert "vosk not installed" in dialog.wake_word_status.text()
+    set_language("system")
+
+
+def test_wake_word_status_label_reports_model_not_downloaded_yet(config, qapp, monkeypatch):
+    set_language("en")
+    monkeypatch.setattr(settings_dialog_mod, "vosk_importable", lambda: (True, ""))
+    monkeypatch.setattr(settings_dialog_mod, "model_present", lambda: False)
+
+    dialog = SettingsDialog(config)
+
+    assert "downloaded yet" in dialog.wake_word_status.text()
+    set_language("system")
+
+
+def test_wake_word_status_label_reports_model_found(config, qapp, monkeypatch):
+    set_language("en")
+    monkeypatch.setattr(settings_dialog_mod, "vosk_importable", lambda: (True, ""))
+    monkeypatch.setattr(settings_dialog_mod, "model_present", lambda: True)
+
+    dialog = SettingsDialog(config)
+
+    assert dialog.wake_word_status.text() == "Wake-word model found."
     set_language("system")
 
 

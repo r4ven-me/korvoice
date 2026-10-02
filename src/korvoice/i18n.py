@@ -131,6 +131,12 @@ _RU = {
     "Wake phrase:": "Кодовая фраза:",
     "e.g. привет корвойс": "например, привет корвойс",
     "Wake-word model found.": "Модель кодового слова найдена.",
+    "Wake-word model not downloaded yet — fetched automatically "
+    "(~45 MB) the first time you enable this.": "Модель кодового слова ещё не скачана — "
+    "она загрузится автоматически (~45 МБ) при первом включении.",
+    "Wake word: downloading model (~45 MB, one-time)…":
+        "Кодовое слово: загрузка модели (~45 МБ, разово)…",
+    "Wake word: loading model…": "Кодовое слово: загрузка модели в память…",
     "Wake word unavailable: {message}": "Кодовое слово недоступно: {message}",
     "Wake word is enabled but no phrase is set — it will stay inactive "
     "until you add one.": "Кодовое слово включено, но фраза не задана — оно останется "

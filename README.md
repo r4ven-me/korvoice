@@ -4,9 +4,11 @@
 local [GigaAM](https://github.com/salute-developers/GigaAM) speech model.**
 Hold a hotkey, speak, release — the recognized text lands in the clipboard,
 gets typed into whatever window has focus, and/or shows up in a small
-history window. Everything runs on-device; nothing is sent anywhere —
-including the optional wake-word listener below, which runs a small
-offline speech recognizer (Vosk) locally and never transmits audio.
+history window. Everything runs on-device; nothing is sent anywhere, aside
+from two one-time first-use downloads of static model files — GigaAM's own
+~1 GB weights, and (only if you enable it) the optional wake-word
+listener's ~45 MB Vosk model below. Neither your voice nor any recognized
+text ever leaves the device.
 
 ## Features
 
@@ -159,18 +161,22 @@ accuracy tradeoff versus a dedicated wake-word engine). Setup:
 
 ```bash
 pipx inject korvoice vosk
-
-# Download vosk-model-small-ru (~45 MB) and unzip it so the directory
-# itself sits here (not nested one level deeper):
-#   ~/.local/share/korvoice/vosk-model-small-ru
-# Get it from https://alphacephei.com/vosk/models
 ```
+
+That's the only manual step — the recognition model
+(`vosk-model-small-ru`, ~45 MB, from
+[alphacephei.com](https://alphacephei.com/vosk/models)) downloads and
+unpacks itself into `~/.local/share/korvoice/` automatically the first
+time you enable the feature, the same way GigaAM's own weights already do
+on first use.
 
 Then in Settings → General, check "Enable wake word" and type a short,
 distinctive Russian phrase into "Wake phrase" (e.g. "привет корвойс") — a
 longer, unusual phrase triggers fewer false positives than a short common
-one. `korvoice --check` reports whether vosk and the model are both in
-place.
+one. The tray tooltip shows "downloading…" then "loading…" the first time,
+before switching to "listening". `korvoice --check` reports whether `vosk`
+itself is installed (the one thing it can't fix automatically) and whether
+the model has been downloaded yet.
 
 ### Clipboard managers
 

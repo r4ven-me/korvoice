@@ -212,12 +212,17 @@ def run_selftest(config: Config) -> int:
                "install wl-clipboard — autotype needs it, and without it the "
                "clipboard output may not work while korvoice has no focus")
 
-    wake_word_ok, wake_word_reason = wakeword.availability()
+    vosk_ok, vosk_reason = wakeword.vosk_importable()
     report(
-        f"wake word available (model: {wakeword.DEFAULT_MODEL_DIR})", wake_word_ok,
-        f"{wake_word_reason} — install `vosk` and/or the model, see README "
-        "(only needed if wake word is enabled)" if not wake_word_ok else "",
+        "vosk importable", vosk_ok,
+        f"{vosk_reason} — install it with `pipx inject korvoice vosk` (only needed "
+        "if wake word is enabled), see README" if not vosk_ok else "",
     )
+    if wakeword.model_present():
+        print(f"ℹ️  wake-word model present at {wakeword.DEFAULT_MODEL_DIR}")
+    else:
+        print("ℹ️  wake-word model not downloaded yet — downloads automatically "
+              "(~45 MB) the first time wake word is enabled")
 
     print(f"\nMode: {config.get('mode')}, hotkey: {config.hotkey('record') or '—'}")
     print(f"Model: {config.get('model')}, device: {config.get('device')}")
@@ -446,6 +451,10 @@ class KorvoiceApp:
         if self.wake_word.is_listening():
             return tr('Wake word armed: listening for "{phrase}"',
                        phrase=self.config.get("wake_word_phrase"))
+        if self._wake_word_status == "downloading":
+            return tr("Wake word: downloading model (~45 MB, one-time)…")
+        if self._wake_word_status == "loading":
+            return tr("Wake word: loading model…")
         if self._wake_word_status.startswith(("error", "unavailable")):
             message = self._wake_word_status.split(": ", 1)[-1]
             return tr("Wake word unavailable: {message}", message=message)

@@ -52,7 +52,7 @@ from .config import (
     Config,
 )
 from .i18n import set_language, tr
-from .wakeword import availability as wake_word_availability
+from .wakeword import model_present, vosk_importable
 
 AUTOSTART_FILE = (
     Path(os.environ.get("XDG_CONFIG_HOME", str(Path.home() / ".config")))
@@ -221,10 +221,13 @@ class SettingsDialog(QDialog):
         self.hotkey_combo_row.setEnabled(not self.hotkey_type_combo.currentData())
 
     def _wake_word_status_text(self) -> str:
-        ok, reason = wake_word_availability()
-        if ok:
-            return tr("Wake-word model found.")
-        return tr("Wake word unavailable: {message}", message=reason)
+        ok, reason = vosk_importable()
+        if not ok:
+            return tr("Wake word unavailable: {message}", message=reason)
+        if not model_present():
+            return tr("Wake-word model not downloaded yet — fetched automatically "
+                       "(~45 MB) the first time you enable this.")
+        return tr("Wake-word model found.")
 
     def _wake_word_enabled_changed(self, checked: bool) -> None:
         self.wake_word_phrase.setEnabled(checked)
@@ -366,11 +369,11 @@ class SettingsDialog(QDialog):
                 tr("Wake word is enabled but no phrase is set — it will stay inactive "
                    "until you add one."),
             )
-        elif wake_word_enabled and not wake_word_availability()[0]:
+        elif wake_word_enabled and not vosk_importable()[0]:
             QMessageBox.information(
                 self, "korvoice",
                 tr("Wake word is enabled but {message} — it will stay inactive until "
-                   "that's fixed.", message=wake_word_availability()[1]),
+                   "that's fixed.", message=vosk_importable()[1]),
             )
 
         self.config.set("theme", self.theme_combo.currentData())

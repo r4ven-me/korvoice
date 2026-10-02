@@ -1,7 +1,10 @@
+import io
 import sys
 import types
+import zipfile
 
 import numpy as np
+import pytest
 
 import korvoice.wakeword as wakeword_mod
 from korvoice.wakeword import WakeWordDetector, WakeWordSilenceWatcher
@@ -189,30 +192,84 @@ def test_is_listening_reflects_listen_worker_presence(config, qapp):
     assert detector.is_listening() is True
 
 
-# -- availability() ------------------------------------------------------------
+# -- vosk_importable() / model_present() --------------------------------------
 
 
-def test_availability_reports_missing_model_dir(tmp_path, monkeypatch):
+def test_model_present_false_when_missing(tmp_path, monkeypatch):
     monkeypatch.setattr(wakeword_mod, "DEFAULT_MODEL_DIR", tmp_path / "missing")
-    ok, reason = wakeword_mod.availability()
-    assert ok is False
-    assert "not found" in reason
+    assert wakeword_mod.model_present() is False
 
 
-def test_availability_reports_vosk_not_installed(tmp_path, monkeypatch):
+def test_model_present_true_when_dir_exists(tmp_path, monkeypatch):
     monkeypatch.setattr(wakeword_mod, "DEFAULT_MODEL_DIR", tmp_path)
+    assert wakeword_mod.model_present() is True
+
+
+def test_vosk_importable_reports_import_error(monkeypatch):
     monkeypatch.setitem(sys.modules, "vosk", None)
-    ok, reason = wakeword_mod.availability()
+    ok, reason = wakeword_mod.vosk_importable()
     assert ok is False
     assert "vosk" in reason
 
 
-def test_availability_ok_when_model_dir_and_vosk_present(tmp_path, monkeypatch):
-    monkeypatch.setattr(wakeword_mod, "DEFAULT_MODEL_DIR", tmp_path)
+def test_vosk_importable_true_when_module_present(monkeypatch):
     monkeypatch.setitem(sys.modules, "vosk", types.ModuleType("vosk"))
-    ok, reason = wakeword_mod.availability()
+    ok, reason = wakeword_mod.vosk_importable()
     assert ok is True
     assert reason == ""
+
+
+# -- _download_and_extract_model() ---------------------------------------------
+
+
+def _build_zip(entries: dict[str, str]) -> bytes:
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w") as archive:
+        for name, content in entries.items():
+            archive.writestr(name, content)
+    return buf.getvalue()
+
+
+def _fake_urlopen(payload: bytes):
+    return lambda *_args, **_kwargs: io.BytesIO(payload)
+
+
+def test_download_and_extract_model_moves_single_top_level_dir_into_place(tmp_path, monkeypatch):
+    payload = _build_zip({"vosk-model-small-ru-0.22/README": "dummy model file"})
+    monkeypatch.setattr(wakeword_mod.urllib.request, "urlopen", _fake_urlopen(payload))
+    model_dir = tmp_path / "vosk-model-small-ru"
+
+    wakeword_mod._download_and_extract_model(model_dir)
+
+    assert model_dir.is_dir()
+    assert (model_dir / "README").read_text() == "dummy model file"
+
+
+def test_download_and_extract_model_rejects_zero_top_level_dirs(tmp_path, monkeypatch):
+    payload = _build_zip({"loose_file.txt": "no top-level dir"})
+    monkeypatch.setattr(wakeword_mod.urllib.request, "urlopen", _fake_urlopen(payload))
+
+    with pytest.raises(RuntimeError, match="found 0"):
+        wakeword_mod._download_and_extract_model(tmp_path / "model")
+
+
+def test_download_and_extract_model_rejects_multiple_top_level_dirs(tmp_path, monkeypatch):
+    payload = _build_zip({"a/file.txt": "x", "b/file.txt": "y"})
+    monkeypatch.setattr(wakeword_mod.urllib.request, "urlopen", _fake_urlopen(payload))
+
+    with pytest.raises(RuntimeError, match="found 2"):
+        wakeword_mod._download_and_extract_model(tmp_path / "model")
+
+
+def test_download_and_extract_model_does_not_leave_partial_state_on_bad_zip(tmp_path, monkeypatch):
+    monkeypatch.setattr(wakeword_mod.urllib.request, "urlopen", _fake_urlopen(b"not a zip file"))
+    model_dir = tmp_path / "model"
+
+    with pytest.raises(zipfile.BadZipFile):
+        wakeword_mod._download_and_extract_model(model_dir)
+
+    assert not model_dir.exists()
+    assert list(tmp_path.iterdir()) == []
 
 
 # -- WakeWordSilenceWatcher -----------------------------------------------------
