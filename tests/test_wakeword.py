@@ -9,6 +9,27 @@ import pytest
 import korvoice.wakeword as wakeword_mod
 from korvoice.wakeword import WakeWordDetector, WakeWordSilenceWatcher
 
+# -- _average_confidence() -----------------------------------------------------
+
+
+def test_average_confidence_none_without_result_key():
+    assert wakeword_mod._average_confidence({"text": "привет корвойс"}) is None
+
+
+def test_average_confidence_none_for_empty_result_list():
+    assert wakeword_mod._average_confidence({"result": [], "text": ""}) is None
+
+
+def test_average_confidence_computes_mean():
+    result = {"result": [{"word": "привет", "conf": 1.0}, {"word": "корвойс", "conf": 0.5}]}
+    assert wakeword_mod._average_confidence(result) == pytest.approx(0.75)
+
+
+def test_average_confidence_ignores_entries_without_conf():
+    result = {"result": [{"word": "привет", "conf": 0.8}, {"word": "корвойс"}]}
+    assert wakeword_mod._average_confidence(result) == pytest.approx(0.8)
+
+
 # -- WakeWordDetector ---------------------------------------------------------
 
 

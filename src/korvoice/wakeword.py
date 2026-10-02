@@ -143,6 +143,19 @@ class _VoskModelLoadWorker(QThread):
         self.loaded.emit(model)
 
 
+def _average_confidence(result: dict) -> float | None:
+    """Mean per-word confidence from a vosk Result() dict (needs
+    SetWords(True) on the recognizer) — None if the model didn't report
+    any (so callers can fail open rather than silently never matching)."""
+    words = result.get("result")
+    if not words:
+        return None
+    confidences = [w["conf"] for w in words if isinstance(w.get("conf"), (int, float))]
+    if not confidences:
+        return None
+    return sum(confidences) / len(confidences)
+
+
 class _VoskListenWorker(QThread):
     """Owns its own sounddevice.InputStream — a separate stream object from
     Recorder's, never open at the same time (see app.py's state machine)."""
@@ -150,11 +163,13 @@ class _VoskListenWorker(QThread):
     detected = Signal()
     failed = Signal(str)
 
-    def __init__(self, model, device: str | int | None, phrase: str, parent=None) -> None:
+    def __init__(self, model, device: str | int | None, phrase: str,
+                 min_confidence: float, parent=None) -> None:
         super().__init__(parent)
         self._model = model
         self._device = device
         self._phrase = phrase
+        self._min_confidence = min_confidence
         self._stop = False
 
     def stop(self) -> None:
@@ -171,6 +186,12 @@ class _VoskListenWorker(QThread):
         except Exception as exc:  # noqa: BLE001 — report, don't crash the app
             self.failed.emit(str(exc))
             return
+        # Per-word confidence lets us reject a text match that's only a
+        # coincidental acoustic fit — the grammar forces every utterance to
+        # decode as either the phrase or "[unk]", so ordinary conversation
+        # occasionally matches the phrase by chance (see README's tradeoff
+        # note); this is a second filter on top of that.
+        recognizer.SetWords(True)
         block_frames = max(1, int(samplerate * _BLOCK_SECONDS))
 
         try:
@@ -189,10 +210,20 @@ class _VoskListenWorker(QThread):
                     self.failed.emit(str(exc))
                     return
                 if recognizer.AcceptWaveform(data.tobytes()):
-                    text = _normalize(json.loads(recognizer.Result()).get("text", ""))
-                    if text == self._phrase:
-                        self.detected.emit()
-                        return
+                    result = json.loads(recognizer.Result())
+                    text = _normalize(result.get("text", ""))
+                    if text != self._phrase:
+                        continue
+                    confidence = _average_confidence(result)
+                    if confidence is not None and confidence < self._min_confidence:
+                        log.debug(
+                            "wake phrase text matched but confidence too low "
+                            "(%.3f < %.3f), ignoring", confidence, self._min_confidence,
+                        )
+                        continue
+                    log.debug("wake phrase matched (confidence=%s)", confidence)
+                    self.detected.emit()
+                    return
 
 
 class WakeWordDetector(QObject):
@@ -257,7 +288,8 @@ class WakeWordDetector(QObject):
 
     def _start_listen(self, phrase: str) -> None:
         device = _resolve_input_device(self.config)
-        worker = _VoskListenWorker(self._model, device, phrase, self)
+        min_confidence = float(self.config.get("wake_word_min_confidence"))
+        worker = _VoskListenWorker(self._model, device, phrase, min_confidence, self)
         worker.detected.connect(self._on_detected)
         worker.failed.connect(self._on_listen_failed)
         worker.finished.connect(worker.deleteLater)

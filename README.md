@@ -194,6 +194,17 @@ in Settings (on by default). Besides general feedback, it's useful for
 telling whether auto-stop is actually firing promptly if a recording ever
 seems to run longer than expected.
 
+Because Vosk's grammar mode forces every utterance in earshot to decode
+as either the configured phrase or "[unk]", ordinary conversation can
+occasionally match it by acoustic coincidence. Besides picking a longer,
+less common phrase (see above), korvoice also rejects a text match whose
+average per-word recognition confidence is below
+`wake_word_min_confidence` (default `0.75`, 0-1 range) — not yet exposed
+in Settings, edit `config.yaml` directly while tuning it. Run
+`korvoice --debug` and watch for "wake phrase matched (confidence=...)"
+/ "...confidence too low ..., ignoring" log lines to see the real values
+your setup produces and adjust from there.
+
 ### Clipboard managers
 
 Because autotype goes through the clipboard, a clipboard manager would see
