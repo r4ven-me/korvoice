@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [1.0.6] - 2026-11-01
+
 - Removed the wake-word feature (Vosk listener, its settings, the `wakeword`
   extra); obsolete `wake_word_*` keys are dropped from `config.yaml`.
 - Autotype no longer sends the paste shortcut when the recognized text could
@@ -81,7 +83,8 @@
   speech recognition, Nord tray/settings GUI, clipboard/autotype/window
   output.
 
-[Unreleased]: https://github.com/r4ven-me/korvoice/compare/v1.0.5...HEAD
+[Unreleased]: https://github.com/r4ven-me/korvoice/compare/v1.0.6...HEAD
+[1.0.6]: https://github.com/r4ven-me/korvoice/compare/v1.0.5...v1.0.6
 [1.0.5]: https://github.com/r4ven-me/korvoice/compare/v1.0.2...v1.0.5
 [1.0.2]: https://github.com/r4ven-me/korvoice/compare/v1.0.1...v1.0.2
 [1.0.1]: https://github.com/r4ven-me/korvoice/compare/v1.0.0...v1.0.1
