@@ -83,6 +83,9 @@ jobs:
           actual = os.environ["RELEASE_TAG"]
           if actual != expected:
               raise SystemExit(f"release tag {actual!r} does not match {expected!r}")
+          with open("CHANGELOG.md", encoding="utf-8") as file:
+              if f"## [{version}]" not in file.read():
+                  raise SystemExit(f"CHANGELOG.md has no section for {version}")
           PY
 
       - name: Install build tools

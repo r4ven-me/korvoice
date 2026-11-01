@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## [Unreleased]
 
 - Removed the wake-word feature (Vosk listener, its settings, the `wakeword`
   extra); obsolete `wake_word_*` keys are dropped from `config.yaml`.
@@ -15,6 +15,27 @@
 - Boolean settings given as strings (`"false"`) are parsed correctly.
 - `--debug` logs the length of a transcription, not its text.
 - CI smoke-tests the built wheel in a clean virtualenv.
+- The tray icon is full-color by default; `dark`/`light` select monochrome variants.
+- GigaAM is installed at a pinned commit; `make release` needs a clean tree and
+  never moves an existing tag; GitHub Actions are pinned to commit SHAs.
+
+## [1.0.5] - 2026-10-02
+
+- Configurable autotype paste shortcut: Ctrl+V or Ctrl+Shift+V (terminals).
+- Optional wake-word activation via offline Vosk (removed again after 1.0.5).
+- Fixed the tray icon missing one refresh after idle/suspend on Cinnamon.
+
+## [1.0.2] - 2026-09-26
+
+- Autotype clipboard restore keeps every previous format and is compatible
+  with all supported PySide6 versions.
+
+## [1.0.1] - 2026-09-26
+
+- Tray icon theming fix; `--debug` logs the transcription time at info level.
+
+## [1.0.0] - 2026-09-26
+
 - Clipboard managers: text that autotype puts in the clipboard only
   temporarily is now marked `x-kde-passwordManagerHint: secret`, so Klipper,
   CopyQ, cliphist and other managers that honour the hint don't record it.
@@ -56,3 +77,9 @@
 - Initial release: push-to-talk/toggle voice input, GigaAM (v3_e2e_ctc)
   speech recognition, Nord tray/settings GUI, clipboard/autotype/window
   output.
+
+[Unreleased]: https://github.com/r4ven-me/korvoice/compare/v1.0.5...HEAD
+[1.0.5]: https://github.com/r4ven-me/korvoice/compare/v1.0.2...v1.0.5
+[1.0.2]: https://github.com/r4ven-me/korvoice/compare/v1.0.1...v1.0.2
+[1.0.1]: https://github.com/r4ven-me/korvoice/compare/v1.0.0...v1.0.1
+[1.0.0]: https://github.com/r4ven-me/korvoice/compare/v0.2.1...v1.0.0
