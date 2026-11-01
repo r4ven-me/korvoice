@@ -15,6 +15,9 @@
 - Boolean settings given as strings (`"false"`) are parsed correctly.
 - `--debug` logs the length of a transcription, not its text.
 - CI smoke-tests the built wheel in a clean virtualenv.
+- X11 autotype is skipped when the focused window changed while the speech
+  was being recognized, so text no longer lands in the wrong window.
+- Tests: end-to-end hotkey → recorder → ASR → output flow.
 - The tray icon is full-color by default; `dark`/`light` select monochrome variants.
 - GigaAM is installed at a pinned commit; `make release` needs a clean tree and
   never moves an existing tag; GitHub Actions are pinned to commit SHAs.
