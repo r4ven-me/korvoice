@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [1.0.8] - 2026-11-01
+
 - Without a working audio system (no PortAudio, no sound server) korvoice still
   starts: `--version`, `--check` and Settings work, `--check` reports the
   reason, and recording fails with a clear message instead of an import crash.
@@ -93,7 +95,8 @@
   speech recognition, Nord tray/settings GUI, clipboard/autotype/window
   output.
 
-[Unreleased]: https://github.com/r4ven-me/korvoice/compare/v1.0.7...HEAD
+[Unreleased]: https://github.com/r4ven-me/korvoice/compare/v1.0.8...HEAD
+[1.0.8]: https://github.com/r4ven-me/korvoice/compare/v1.0.7...v1.0.8
 [1.0.7]: https://github.com/r4ven-me/korvoice/compare/v1.0.6...v1.0.7
 [1.0.6]: https://github.com/r4ven-me/korvoice/compare/v1.0.5...v1.0.6
 [1.0.5]: https://github.com/r4ven-me/korvoice/compare/v1.0.2...v1.0.5
