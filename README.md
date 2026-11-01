@@ -5,10 +5,8 @@ local [GigaAM](https://github.com/salute-developers/GigaAM) speech model.**
 Hold a hotkey, speak, release — the recognized text lands in the clipboard,
 gets typed into whatever window has focus, and/or shows up in a small
 history window. Everything runs on-device; nothing is sent anywhere, aside
-from two one-time first-use downloads of static model files — GigaAM's own
-~1 GB weights, and (only if you enable it) the optional wake-word
-listener's ~45 MB Vosk model below. Neither your voice nor any recognized
-text ever leaves the device.
+from the one-time first-use download of GigaAM's own ~1 GB weights.
+Neither your voice nor any recognized text ever leaves the device.
 
 ## Features
 
@@ -33,16 +31,6 @@ text ever leaves the device.
   clipboard temporarily is marked so that clipboard managers skip it
   (configurable, see Clipboard managers below).
 - **Autostart** — optional login autostart entry, toggled from Settings.
-- **Optional wake-word activation** — say a configured Russian phrase to
-  start recording without touching the hotkey, works in either recording
-  mode (auto-stops after a trailing pause, since there's no hotkey release
-  to key off of). Fully offline via [Vosk](https://alphacephei.com/vosk/)'s
-  grammar-constrained recognizer, the only practical way to spot an
-  arbitrary Russian phrase without the cloud — expect more false
-  accepts/rejects than a dedicated wake-word engine (Porcupine,
-  openWakeWord) would give; that's the deliberate tradeoff for staying
-  fully local and not being limited to a handful of English preset words.
-  See Wake word (optional) below.
 
 ## Quick start
 
@@ -86,7 +74,7 @@ korvoice              # start (or, if already running, no-op) the tray daemon
 korvoice --settings   # open settings in the running instance
 korvoice --history    # open the history window in the running instance
 korvoice --quit       # quit the running instance
-korvoice --check      # diagnostics: tray, hotkey backend, mic, ffmpeg, gigaam, wake word
+korvoice --check      # diagnostics: tray, hotkey backend, mic, ffmpeg, gigaam
 korvoice --debug      # verbose logging (also to ~/.local/state/korvoice/korvoice.log)
 ```
 
@@ -109,10 +97,6 @@ Settings (`~/.config/korvoice/config.yaml`, YAML, written on every change):
 | Hide from clipboard history | only temporary paste text / all recognized text / nothing | only temporary paste text |
 | Keep history between restarts | on/off (last 1000 entries) | off |
 | Autostart at login | on/off | off |
-| Wake word enabled | on/off | off |
-| Wake phrase | free text (Russian phrase) | empty |
-| Silence before auto-stop (wake word) | 0.3–5.0 seconds | 1.2 |
-| Wake word start/stop sound | on/off | on |
 
 ### GPU acceleration
 
@@ -156,56 +140,6 @@ Ctrl+Shift+V (default is Ctrl+V, which most other applications expect).
 If the relevant tool isn't set up, autotype fails and the reason shows up in
 the tray tooltip until the next successful autotype — clipboard and the
 history window are unaffected either way.
-
-### Wake word (optional)
-
-Lets korvoice start recording when it hears a phrase you configure, instead
-of only via the hotkey. Entirely offline (see Features above for the
-accuracy tradeoff versus a dedicated wake-word engine). Setup:
-
-```bash
-pipx inject korvoice vosk
-```
-
-That's the only manual step — the recognition model
-(`vosk-model-small-ru`, ~45 MB, from
-[alphacephei.com](https://alphacephei.com/vosk/models)) downloads and
-unpacks itself into `~/.local/share/korvoice/` automatically the first
-time you enable the feature, the same way GigaAM's own weights already do
-on first use.
-
-Then in Settings → General, check "Enable wake word" and type a short,
-distinctive Russian phrase into "Wake phrase" (e.g. "привет корвойс") — a
-longer, unusual phrase triggers fewer false positives than a short common
-one. The tray tooltip shows "downloading…" then "loading…" the first time,
-before switching to "listening". `korvoice --check` reports whether `vosk`
-itself is installed (the one thing it can't fix automatically) and whether
-the model has been downloaded yet.
-
-Since there's no hotkey release to key off of, a wake-word-triggered
-recording auto-stops after a trailing silence instead — if it cuts off
-before you're done speaking, or waits too long after you've finished,
-adjust Settings → General → "Silence before auto-stop, s:" (default 1.2s).
-This only affects wake-word recordings; push-to-talk/toggle still stop on
-hotkey release/press.
-
-Since there's no physical key press to confirm a wake-word-triggered
-recording the way the hotkey has, korvoice can also play a short beep on
-start and a different one on auto-stop — "Play a sound on start/auto-stop"
-in Settings (on by default). Besides general feedback, it's useful for
-telling whether auto-stop is actually firing promptly if a recording ever
-seems to run longer than expected.
-
-Because Vosk's grammar mode forces every utterance in earshot to decode
-as either the configured phrase or "[unk]", ordinary conversation can
-occasionally match it by acoustic coincidence. Besides picking a longer,
-less common phrase (see above), korvoice also rejects a text match whose
-average per-word recognition confidence is below
-`wake_word_min_confidence` (default `0.75`, 0-1 range) — not yet exposed
-in Settings, edit `config.yaml` directly while tuning it. Run
-`korvoice --debug` and watch for "wake phrase matched (confidence=...)"
-/ "...confidence too low ..., ignoring" log lines to see the real values
-your setup produces and adjust from there.
 
 ### Clipboard managers
 

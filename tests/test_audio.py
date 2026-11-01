@@ -31,34 +31,6 @@ def test_samplerate_reflects_resolved_rate_after_start(monkeypatch):
     assert recorder.samplerate == 48000
 
 
-def test_start_wires_on_chunk_hook(monkeypatch):
-    monkeypatch.setattr(
-        audio_mod.sd, "query_devices", lambda *args, **kwargs: {"default_samplerate": 16000}
-    )
-    monkeypatch.setattr(audio_mod.sd, "InputStream", lambda **kwargs: _FakeStream())
-    recorder = Recorder()
-    received = []
-
-    recorder.start(on_chunk=received.append)
-    indata = np.array([[0.1], [0.2]], dtype=np.float32)
-    recorder._callback(indata, 2, None, None)
-
-    assert len(received) == 1
-    np.testing.assert_array_equal(received[0], indata[:, 0])
-
-
-def test_callback_without_on_chunk_does_not_raise(monkeypatch):
-    monkeypatch.setattr(
-        audio_mod.sd, "query_devices", lambda *args, **kwargs: {"default_samplerate": 16000}
-    )
-    monkeypatch.setattr(audio_mod.sd, "InputStream", lambda **kwargs: _FakeStream())
-    recorder = Recorder()
-
-    recorder.start()
-    indata = np.array([[0.1]], dtype=np.float32)
-    recorder._callback(indata, 1, None, None)  # must not raise
-
-
 def test_resolve_samplerate_module_function_matches_device_rate(monkeypatch):
     monkeypatch.setattr(
         audio_mod.sd, "query_devices", lambda *args, **kwargs: {"default_samplerate": 48000}

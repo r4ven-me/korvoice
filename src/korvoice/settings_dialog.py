@@ -16,7 +16,6 @@ from PySide6.QtWidgets import (
     QComboBox,
     QDialog,
     QDialogButtonBox,
-    QDoubleSpinBox,
     QFormLayout,
     QHBoxLayout,
     QKeySequenceEdit,
@@ -54,7 +53,6 @@ from .config import (
     Config,
 )
 from .i18n import set_language, tr
-from .wakeword import model_present, vosk_importable
 
 AUTOSTART_FILE = (
     Path(os.environ.get("XDG_CONFIG_HOME", str(Path.home() / ".config")))
@@ -199,34 +197,6 @@ class SettingsDialog(QDialog):
         hotkey_note.setWordWrap(True)
         form.addRow("", hotkey_note)
 
-        self.wake_word_enabled = QCheckBox(tr("Enable wake word"))
-        self.wake_word_enabled.setChecked(bool(self.config.get("wake_word_enabled")))
-        form.addRow("", self.wake_word_enabled)
-
-        self.wake_word_phrase = QLineEdit(str(self.config.get("wake_word_phrase")))
-        self.wake_word_phrase.setPlaceholderText(tr("e.g. привет корвойс"))
-        form.addRow(tr("Wake phrase:"), self.wake_word_phrase)
-
-        self.wake_word_silence_seconds = QDoubleSpinBox()
-        self.wake_word_silence_seconds.setRange(0.3, 5.0)
-        self.wake_word_silence_seconds.setSingleStep(0.1)
-        self.wake_word_silence_seconds.setDecimals(1)
-        self.wake_word_silence_seconds.setValue(
-            float(self.config.get("wake_word_silence_seconds")))
-        self.wake_word_silence_seconds.setToolTip(tr("Wake word silence note"))
-        form.addRow(tr("Silence before auto-stop, s:"), self.wake_word_silence_seconds)
-
-        self.wake_word_sound_enabled = QCheckBox(tr("Play a sound on start/auto-stop"))
-        self.wake_word_sound_enabled.setChecked(bool(self.config.get("wake_word_sound_enabled")))
-        form.addRow("", self.wake_word_sound_enabled)
-
-        self.wake_word_status = QLabel(self._wake_word_status_text())
-        self.wake_word_status.setWordWrap(True)
-        form.addRow("", self.wake_word_status)
-
-        self.wake_word_enabled.toggled.connect(self._wake_word_enabled_changed)
-        self._wake_word_enabled_changed(self.wake_word_enabled.isChecked())
-
         settings_path_label = QLabel(tr("Settings file: {path}", path=self.config.file_path()))
         settings_path_label.setWordWrap(True)
         form.addRow("", settings_path_label)
@@ -234,20 +204,6 @@ class SettingsDialog(QDialog):
 
     def _hotkey_type_changed(self, _index: int) -> None:
         self.hotkey_combo_row.setEnabled(not self.hotkey_type_combo.currentData())
-
-    def _wake_word_status_text(self) -> str:
-        ok, reason = vosk_importable()
-        if not ok:
-            return tr("Wake word unavailable: {message}", message=reason)
-        if not model_present():
-            return tr("Wake-word model not downloaded yet — fetched automatically "
-                       "(~45 MB) the first time you enable this.")
-        return tr("Wake-word model found.")
-
-    def _wake_word_enabled_changed(self, checked: bool) -> None:
-        self.wake_word_phrase.setEnabled(checked)
-        self.wake_word_silence_seconds.setEnabled(checked)
-        self.wake_word_sound_enabled.setEnabled(checked)
 
     # -- "Output" tab ------------------------------------------------------------
 
@@ -390,21 +346,6 @@ class SettingsDialog(QDialog):
             if not proceed:
                 return
 
-        wake_word_enabled = self.wake_word_enabled.isChecked()
-        wake_word_phrase = self.wake_word_phrase.text().strip()
-        if wake_word_enabled and not wake_word_phrase:
-            QMessageBox.information(
-                self, "korvoice",
-                tr("Wake word is enabled but no phrase is set — it will stay inactive "
-                   "until you add one."),
-            )
-        elif wake_word_enabled and not vosk_importable()[0]:
-            QMessageBox.information(
-                self, "korvoice",
-                tr("Wake word is enabled but {message} — it will stay inactive until "
-                   "that's fixed.", message=vosk_importable()[1]),
-            )
-
         self.config.set("theme", self.theme_combo.currentData())
         language = str(self.language_combo.currentData())
         self.config.set("language", language)
@@ -426,10 +367,6 @@ class SettingsDialog(QDialog):
         self.config.set("device", self.device_combo.currentData())
         self.config.set("chunk_max_seconds", self.chunk_seconds.value())
         self.config.set("input_device", self.input_device_combo.currentData())
-        self.config.set("wake_word_enabled", wake_word_enabled)
-        self.config.set("wake_word_phrase", wake_word_phrase)
-        self.config.set("wake_word_silence_seconds", self.wake_word_silence_seconds.value())
-        self.config.set("wake_word_sound_enabled", self.wake_word_sound_enabled.isChecked())
         self.config.set_hotkey("record", sequence)
 
         try:

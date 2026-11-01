@@ -30,7 +30,7 @@ from PySide6.QtGui import QAction, QActionGroup, QGuiApplication
 from PySide6.QtNetwork import QLocalServer, QLocalSocket
 from PySide6.QtWidgets import QApplication, QMenu, QSystemTrayIcon
 
-from . import __version__, sound, theme, wakeword
+from . import __version__, theme
 from .asr import Engine
 from .audio import MIN_TRANSCRIBE_SAMPLES, SAMPLE_RATE, Recorder, list_input_devices
 from .config import Config
@@ -38,7 +38,6 @@ from .hotkeys import GlobalHotkeys
 from .i18n import set_language, tr
 from .output import OutputDispatcher
 from .settings_dialog import AboutDialog, SettingsDialog
-from .wakeword import WakeWordDetector, WakeWordSilenceWatcher
 from .windows import HistoryWindow
 
 SOCKET_NAME = f"korvoice-{getpass.getuser()}"
@@ -212,18 +211,6 @@ def run_selftest(config: Config) -> int:
                "install wl-clipboard — autotype needs it, and without it the "
                "clipboard output may not work while korvoice has no focus")
 
-    vosk_ok, vosk_reason = wakeword.vosk_importable()
-    report(
-        "vosk importable", vosk_ok,
-        f"{vosk_reason} — install it with `pipx inject korvoice vosk` (only needed "
-        "if wake word is enabled), see README" if not vosk_ok else "",
-    )
-    if wakeword.model_present():
-        print(f"ℹ️  wake-word model present at {wakeword.DEFAULT_MODEL_DIR}")
-    else:
-        print("ℹ️  wake-word model not downloaded yet — downloads automatically "
-              "(~45 MB) the first time wake word is enabled")
-
     print(f"\nMode: {config.get('mode')}, hotkey: {config.hotkey('record') or '—'}")
     print(f"Model: {config.get('model')}, device: {config.get('device')}")
     print(f"Settings file: {config.file_path()}")
@@ -305,14 +292,6 @@ class KorvoiceApp:
         self.engine.error.connect(self._on_engine_error)
         self.engine.status_changed.connect(self._on_engine_status)
 
-        self.wake_word = WakeWordDetector(config)
-        self.wake_word.detected.connect(self._on_wake_word_detected)
-        self.wake_word.status_changed.connect(self._on_wake_word_status)
-        self._wake_word_status = ""
-        self._wake_word_silence_watcher = WakeWordSilenceWatcher()
-        self._wake_word_silence_watcher.silence_detected.connect(
-            self._on_wake_word_silence_timeout)
-
         self.output = OutputDispatcher(config)
         self.output.delivered.connect(self._on_output_window)
         self.output.autotype_unavailable.connect(self._on_autotype_unavailable)
@@ -347,8 +326,6 @@ class KorvoiceApp:
         # project's dev host, which otherwise landed entirely on the
         # user's first-ever recording with no feedback why it's slow.
         self.engine.preload()
-        if config.get("wake_word_enabled"):
-            self.wake_word.preload()
 
     # -- input device -----------------------------------------------------------
 
@@ -441,25 +418,7 @@ class KorvoiceApp:
             lines.append(note)
         if self._autotype_note:
             lines.append(self._autotype_note)
-        wake_word_note = self._wake_word_tooltip_line()
-        if wake_word_note:
-            lines.append(wake_word_note)
         self.tray.setToolTip("\n".join(lines))
-
-    def _wake_word_tooltip_line(self) -> str:
-        if not self.config.get("wake_word_enabled"):
-            return ""
-        if self.wake_word.is_listening():
-            return tr('Wake word armed: listening for "{phrase}"',
-                       phrase=self.config.get("wake_word_phrase"))
-        if self._wake_word_status == "downloading":
-            return tr("Wake word: downloading model (~45 MB, one-time)…")
-        if self._wake_word_status == "loading":
-            return tr("Wake word: loading model…")
-        if self._wake_word_status.startswith(("error", "unavailable")):
-            message = self._wake_word_status.split(": ", 1)[-1]
-            return tr("Wake word unavailable: {message}", message=message)
-        return ""
 
     def hotkeys_note(self) -> str:
         if getattr(self, "hotkeys", None) and self.hotkeys.backend == "none" and self.hotkeys.error:
@@ -485,22 +444,12 @@ class KorvoiceApp:
         elif is_press:  # toggle: react on press only, ignore release
             self._on_record_action()
 
-    def _start_recording(self, auto_stop: bool = False) -> None:
+    def _start_recording(self) -> None:
         if self.state != "idle":
             return
-        self.wake_word.stop_listening()
         try:
             self.recorder.device = self._resolve_input_device()
-            on_chunk = self._wake_word_silence_watcher.feed if auto_stop else None
-            self.recorder.start(on_chunk=on_chunk)
-            if auto_stop:
-                # Must come after start(): only then is recorder.samplerate
-                # the real, resolved rate for *this* session (a device
-                # fallback inside start() can change it from last time).
-                self._wake_word_silence_watcher.reset(
-                    samplerate=self.recorder.samplerate,
-                    required_silence_seconds=float(self.config.get("wake_word_silence_seconds")),
-                )
+            self.recorder.start()
             if self.recorder.used_default_fallback:
                 self.config.set("input_device", "")
                 self.tray.showMessage(
@@ -513,7 +462,6 @@ class KorvoiceApp:
             self.tray.showMessage(
                 "korvoice", tr("Could not start recording: {message}", message=exc),
                                   QSystemTrayIcon.MessageIcon.Warning)
-            self._maybe_start_wake_word_listening()
             return
         self.state = "recording"
         self._record_started_at = time.monotonic()
@@ -534,7 +482,6 @@ class KorvoiceApp:
             )
             self.state = "idle"
             self._update_tray_visuals(force_refresh=True)
-            self._maybe_start_wake_word_listening()
             return
         self.state = "transcribing"
         self._transcribe_started_at = time.monotonic()
@@ -552,40 +499,15 @@ class KorvoiceApp:
         log.debug("transcription result: %r", text)
         self.state = "idle"
         self._update_tray_visuals(force_refresh=True)
-        self._maybe_start_wake_word_listening()
         if text:
             self.output.dispatch(text)
 
     def _on_engine_error(self, message: str) -> None:
         self.state = "idle"
         self._update_tray_visuals(force_refresh=True)
-        self._maybe_start_wake_word_listening()
         self.tray.showMessage(
             "korvoice", tr("Recognition failed: {message}", message=message),
                               QSystemTrayIcon.MessageIcon.Warning)
-
-    # -- wake word ------------------------------------------------------------
-
-    def _maybe_start_wake_word_listening(self) -> None:
-        if self.state == "idle" and self.config.get("wake_word_enabled"):
-            self.wake_word.start_listening()
-
-    def _on_wake_word_detected(self) -> None:
-        log.debug("wake word detected")
-        if self.config.get("wake_word_sound_enabled"):
-            sound.play_wake_word_started()
-        self._start_recording(auto_stop=True)
-
-    def _on_wake_word_silence_timeout(self) -> None:
-        if self.config.get("wake_word_sound_enabled"):
-            sound.play_wake_word_stopped()
-        self._stop_recording()
-
-    def _on_wake_word_status(self, status: str) -> None:
-        self._wake_word_status = status
-        if status == "ready":
-            self._maybe_start_wake_word_listening()
-        self._update_tooltip()
 
     def _on_output_window(self, text: str) -> None:
         self._show_history_window().append_text(text)
@@ -640,9 +562,6 @@ class KorvoiceApp:
         # A newly selected model/device starts loading right away, not on
         # the next dictation; a no-op when neither changed.
         self.engine.preload()
-        self.wake_word.stop_listening()
-        self.wake_word.preload()
-        self._maybe_start_wake_word_listening()
         if not self.config.get("output_autotype"):
             self._autotype_note = ""
             self._update_tooltip()
@@ -667,7 +586,6 @@ class KorvoiceApp:
         self.server.close()
         QLocalServer.removeServer(SOCKET_NAME)
         self.hotkeys.stop()
-        self.wake_word.stop_listening()
         if self.state == "recording":
             self.recorder.stop()
         self.output.shutdown()

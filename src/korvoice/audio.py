@@ -13,7 +13,6 @@ from __future__ import annotations
 import logging
 import threading
 import wave
-from collections.abc import Callable
 from pathlib import Path
 
 import numpy as np
@@ -46,15 +45,12 @@ class Recorder:
         self._stream: sd.InputStream | None = None
         self._lock = threading.Lock()
         self._samplerate = SAMPLE_RATE
-        self._on_chunk: Callable[[np.ndarray], None] | None = None
         self.used_default_fallback = False
 
     @property
     def samplerate(self) -> int:
         """The actual sample rate the current/most recent stream opened at
-        (resolved inside start()). Lets on_chunk callers (e.g. the
-        wake-word silence watcher) convert chunk sample counts to real
-        seconds without duplicating resolve_samplerate()."""
+        (resolved inside start())."""
         return self._samplerate
 
     def _resolve_samplerate(self) -> int:
@@ -63,15 +59,8 @@ class Recorder:
         system default input device in that case)."""
         return resolve_samplerate(self.device)
 
-    def start(self, on_chunk: Callable[[np.ndarray], None] | None = None) -> None:
-        """`on_chunk`, if given, is invoked with each raw mono chunk as it
-        arrives (in addition to the normal buffering), for callers that need
-        to react to audio in real time — e.g. a trailing-silence watcher for
-        a wake-word-triggered recording (see app.py). It runs on
-        sounddevice's own realtime callback thread, so it must be fast and
-        non-blocking."""
+    def start(self) -> None:
         self._frames = []
-        self._on_chunk = on_chunk
         self.used_default_fallback = False
         requested_device = self.device
         devices = (requested_device, None) if requested_device is not None else (None,)
@@ -106,8 +95,6 @@ class Recorder:
         chunk = indata[:, 0].copy()
         with self._lock:
             self._frames.append(chunk)
-        if self._on_chunk is not None:
-            self._on_chunk(chunk)
 
     def stop(self) -> np.ndarray:
         """Stops capture and returns the full recording as float32 in
@@ -132,8 +119,7 @@ def resolve_samplerate(device: str | int | None) -> int:
     (e.g. a USB mic exposed as "hw:0,0") only supports its own fixed rate
     and raises PaInvalidSampleRate for anything else. `device=None` means
     the system default input device. Shared by Recorder and anything else
-    that opens its own InputStream against the same configured device
-    (e.g. wakeword.py's continuous listener)."""
+    that opens its own InputStream against the same configured device."""
     try:
         info = sd.query_devices(device) if device is not None else sd.query_devices(kind="input")
         rate = int(info["default_samplerate"])
@@ -144,8 +130,8 @@ def resolve_samplerate(device: str | int | None) -> int:
 
 
 def to_pcm16_bytes(audio: np.ndarray) -> bytes:
-    """Float32 [-1, 1] mono -> 16-bit PCM bytes, the format both write_wav's
-    WAV container and vosk's AcceptWaveform expect."""
+    """Float32 [-1, 1] mono -> 16-bit PCM bytes, the format write_wav's
+    WAV container expects."""
     clipped = np.clip(audio, -1.0, 1.0)
     return (clipped * 32767.0).astype(np.int16).tobytes()
 

@@ -1,4 +1,3 @@
-import pytest
 from PySide6.QtGui import QKeySequence
 from PySide6.QtWidgets import QLabel, QMessageBox
 
@@ -161,83 +160,6 @@ def test_saving_empty_hotkey_proceeds_on_yes(config, qapp, monkeypatch):
     assert config.hotkey("record") == ""
 
 
-def test_wake_word_phrase_disabled_until_checkbox_checked(config, qapp):
-    dialog = SettingsDialog(config)
-    assert not dialog.wake_word_enabled.isChecked()
-    assert not dialog.wake_word_phrase.isEnabled()
-    assert not dialog.wake_word_silence_seconds.isEnabled()
-    assert not dialog.wake_word_sound_enabled.isEnabled()
-
-    dialog.wake_word_enabled.setChecked(True)
-
-    assert dialog.wake_word_phrase.isEnabled()
-    assert dialog.wake_word_silence_seconds.isEnabled()
-    assert dialog.wake_word_sound_enabled.isEnabled()
-
-
-def test_saving_wake_word_settings_persists(config, qapp, monkeypatch):
-    monkeypatch.setattr(settings_dialog_mod, "vosk_importable", lambda: (True, ""))
-    dialog = SettingsDialog(config)
-    dialog.wake_word_enabled.setChecked(True)
-    dialog.wake_word_phrase.setText("привет корвойс")
-    dialog.wake_word_silence_seconds.setValue(2.3)
-    dialog.wake_word_sound_enabled.setChecked(False)
-
-    dialog._save()
-
-    assert config.get("wake_word_enabled") is True
-    assert config.get("wake_word_phrase") == "привет корвойс"
-    assert config.get("wake_word_silence_seconds") == pytest.approx(2.3)
-    assert config.get("wake_word_sound_enabled") is False
-
-
-def test_saving_wake_word_enabled_without_phrase_warns_but_saves(config, qapp, monkeypatch):
-    dialog = SettingsDialog(config)
-    dialog.wake_word_enabled.setChecked(True)
-    warned = []
-    monkeypatch.setattr(QMessageBox, "information", lambda *a, **k: warned.append(True))
-
-    dialog._save()
-
-    assert warned == [True]
-    assert config.get("wake_word_enabled") is True
-    assert config.get("wake_word_phrase") == ""
-
-
-def test_wake_word_status_label_reports_vosk_unavailable(config, qapp, monkeypatch):
-    set_language("en")
-    monkeypatch.setattr(
-        settings_dialog_mod, "vosk_importable", lambda: (False, "vosk not installed")
-    )
-
-    dialog = SettingsDialog(config)
-
-    assert "vosk not installed" in dialog.wake_word_status.text()
-    set_language("system")
-
-
-def test_wake_word_status_label_reports_model_not_downloaded_yet(config, qapp, monkeypatch):
-    set_language("en")
-    monkeypatch.setattr(settings_dialog_mod, "vosk_importable", lambda: (True, ""))
-    monkeypatch.setattr(settings_dialog_mod, "model_present", lambda: False)
-
-    dialog = SettingsDialog(config)
-
-    assert "downloaded yet" in dialog.wake_word_status.text()
-    set_language("system")
-
-
-def test_wake_word_status_label_reports_model_found(config, qapp, monkeypatch):
-    set_language("en")
-    monkeypatch.setattr(settings_dialog_mod, "vosk_importable", lambda: (True, ""))
-    monkeypatch.setattr(settings_dialog_mod, "model_present", lambda: True)
-
-    dialog = SettingsDialog(config)
-
-    assert dialog.wake_word_status.text() == "Wake-word model found."
-    set_language("system")
-
-
 def test_clipboard_hide_history_defaults_to_temporary(config, qapp):
     dialog = SettingsDialog(config)
 
@@ -275,13 +197,12 @@ def test_english_notes_show_text_not_ids(config, qapp):
         texts = [label.text() for label in dialog.findChildren(QLabel)]
         tooltips = [dialog.output_autotype.toolTip(), dialog.chunk_seconds.toolTip(),
                     dialog.clipboard_hide_combo.toolTip(),
-                    dialog.wake_word_silence_seconds.toolTip(),
                     dialog.autotype_shortcut_combo.toolTip()]
     finally:
         set_language("system")
 
     ids = {"X11 hotkey note", "GigaAM model note", "GigaAM chunk note",
-           "Autotype requirements", "Clipboard history note", "Wake word silence note",
+           "Autotype requirements", "Clipboard history note",
            "Autotype shortcut note"}
     assert not ids & set(texts)
     assert not ids & set(tooltips)

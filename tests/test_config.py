@@ -25,15 +25,6 @@ def test_set_persists_across_instances(config_dir, config):
     assert reloaded.hotkey("record") == "Ctrl+Alt+V"
 
 
-def test_wake_word_phrase_roundtrips_cyrillic_text(config_dir, config):
-    config.set("wake_word_enabled", True)
-    config.set("wake_word_phrase", "привет корвойс")
-
-    reloaded = Config()
-    assert reloaded.get("wake_word_enabled") is True
-    assert reloaded.get("wake_word_phrase") == "привет корвойс"
-
-
 def test_get_coerces_int_type(config):
     config.set("chunk_max_seconds", "15")
     assert config.get("chunk_max_seconds") == 15
@@ -43,12 +34,6 @@ def test_get_coerces_int_type(config):
 def test_get_coerces_bool_type(config):
     config.set("output_window", 0)
     assert config.get("output_window") is False
-
-
-def test_get_coerces_float_type(config):
-    config.set("wake_word_silence_seconds", "1.5")
-    assert config.get("wake_word_silence_seconds") == 1.5
-    assert isinstance(config.get("wake_word_silence_seconds"), float)
 
 
 def test_broken_yaml_falls_back_to_defaults(config_dir):

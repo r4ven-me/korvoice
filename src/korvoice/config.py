@@ -104,20 +104,6 @@ GENERAL_DEFAULTS = {
     "clipboard_hide_history": "temporary",  # temporary | all | none
     "remove_fillers": False,    # remove standalone э / э-э / эм / м-м
     "history_persistent": False,
-    "wake_word_enabled": False,  # listen continuously for wake_word_phrase while idle
-    "wake_word_phrase": "",      # free-text Russian phrase, e.g. "привет корвойс"
-    # Trailing silence after wake-word-triggered speech before auto-stopping
-    # the recording. 1.2s survives a normal mid-sentence pause without
-    # feeling like a stuck mic once the user is actually done talking.
-    "wake_word_silence_seconds": 1.2,
-    "wake_word_sound_enabled": True,  # beep on wake-word start/auto-stop
-    # Minimum average per-word recognition confidence (0-1) required to
-    # accept a text match as the real wake phrase, not just a coincidental
-    # acoustic fit to ordinary conversation. Not exposed in Settings yet —
-    # an experimental knob, edit config.yaml directly while tuning it (see
-    # `korvoice --debug`'s "wake phrase matched/ignoring" log lines for the
-    # real confidence values your setup produces).
-    "wake_word_min_confidence": 0.75,
 }
 
 HOTKEY_DEFAULTS = {
