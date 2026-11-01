@@ -52,11 +52,11 @@ Then korvoice itself:
 pipx install korvoice
 
 # Required ASR backend. The GigaAM release currently on PyPI lacks the v3/e2e
-# models used by korvoice, so install its current GitHub version into the same
+# models used by korvoice, so install the GitHub version pinned below (the commit korvoice is tested with) into the same
 # pipx environment. The extra index selects CPU-only PyTorch wheels.
 pipx runpip korvoice install \
   --extra-index-url https://download.pytorch.org/whl/cpu \
-  "gigaam[torch] @ git+https://github.com/salute-developers/GigaAM.git"
+  "gigaam[torch] @ git+https://github.com/salute-developers/GigaAM.git@7447938d791c4f3e643386ee22c33777004293a5"
 
 korvoice          # starts the tray daemon
 korvoice --check  # environment diagnostics (mic, ffmpeg, hotkey backend, gigaam)
@@ -104,7 +104,7 @@ For NVIDIA CUDA, omit the PyTorch CPU index when installing GigaAM:
 
 ```bash
 pipx runpip korvoice install \
-  "gigaam[torch] @ git+https://github.com/salute-developers/GigaAM.git"
+  "gigaam[torch] @ git+https://github.com/salute-developers/GigaAM.git@7447938d791c4f3e643386ee22c33777004293a5"
 ```
 
 Then set Settings → Model → Inference device to `cuda` (or leave `auto`).
@@ -175,9 +175,10 @@ There is no mypy/typecheck step (see the comment in `pyproject.toml`).
 `main` pushes and manual runs. Pushing a tag matching the version in
 `pyproject.toml` (for example, `v0.1.0`) additionally publishes the wheel and
 source distribution to PyPI using trusted publishing — no API token is stored
-in GitHub. `make release` moves an existing tag of the same version to the
-new commit, which allows retrying a failed workflow; it cannot overwrite a
-version already accepted by PyPI.
+in GitHub. `make release` requires a clean working tree (commit the version
+bump and changelog first) and refuses to reuse an existing tag: release tags
+are immutable. Retry a failed publish with "Re-run jobs" in GitHub Actions;
+ship a fix under a new patch version.
 
 Configure a PyPI trusted publisher with owner `r4ven-me`, repository
 `korvoice`, workflow `publish.yml`, and environment `pypi`. The required

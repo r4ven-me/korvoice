@@ -10,9 +10,7 @@
 #
 # Usage:
 #   make check                          # lint + test
-#   make release                        # check, commit if dirty, tag vX.Y.Z, push
-#   make release MSG="Fix hotkeys"      # custom commit message (used only if there
-#                                        # are uncommitted changes to commit)
+#   make release                        # check, then tag vX.Y.Z (clean tree only) and push
 #   make version                        # print the tag this would create
 
 # `uv run --extra dev` creates/updates an isolated project environment with
@@ -26,7 +24,6 @@ RUNNER := $(shell if command -v uv >/dev/null 2>&1; then \
                    else printf '%s' '$(PYTHON) -m'; fi)
 VERSION := $(shell sed -n 's/^version = "\(.*\)"/\1/p' pyproject.toml)
 TAG     := v$(VERSION)
-MSG     ?= Release $(TAG)
 
 .PHONY: help install test lint check release version
 
@@ -47,23 +44,22 @@ check: lint test
 version:
 	@echo $(TAG)
 
-# Tags the version currently in pyproject.toml and pushes it. If that tag
-# already exists locally or on origin, move it to the new release commit.
-# This is useful for retrying a failed CI publish, but cannot overwrite a
-# version that PyPI has already accepted (PyPI releases are immutable).
+# Tags the version currently in pyproject.toml and pushes it. Requires a
+# clean working tree (commit the version bump and changelog first) and
+# refuses to touch a tag that already exists: release tags are immutable.
+# To retry a failed publish, use "Re-run jobs" in GitHub Actions; for a fix,
+# bump the patch version.
 release: check
 	@if [ -n "$$(git status --porcelain)" ]; then \
-		git add -A; \
-		git commit -m "$(MSG)"; \
+		echo "release: working tree is not clean; commit or stash your changes first" >&2; \
+		exit 1; \
 	fi
+	@if git rev-parse -q --verify "refs/tags/$(TAG)" >/dev/null \
+		|| git ls-remote --exit-code --tags origin "refs/tags/$(TAG)" >/dev/null 2>&1; then \
+		echo "release: tag $(TAG) already exists; bump the version instead" >&2; \
+		exit 1; \
+	fi
+	@echo "release: tagging $(TAG) at $$(git rev-parse --short HEAD)"
 	git push origin HEAD
-	@if git ls-remote --exit-code --tags origin "refs/tags/$(TAG)" >/dev/null 2>&1; then \
-		echo "release: replacing remote tag $(TAG)"; \
-		git push origin ":refs/tags/$(TAG)"; \
-	fi
-	@if git rev-parse "refs/tags/$(TAG)" >/dev/null 2>&1; then \
-		echo "release: replacing local tag $(TAG)"; \
-		git tag -d "$(TAG)"; \
-	fi
 	git tag -a "$(TAG)" -m "Release $(TAG)"
 	git push origin "$(TAG)"
