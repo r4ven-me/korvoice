@@ -2,6 +2,19 @@
 
 ## Unreleased
 
+- Removed the wake-word feature (Vosk listener, its settings, the `wakeword`
+  extra); obsolete `wake_word_*` keys are dropped from `config.yaml`.
+- Autotype no longer sends the paste shortcut when the recognized text could
+  not be put in the clipboard (it used to paste the previous contents).
+- Quitting waits for the model-load/transcription threads instead of
+  destroying running ones.
+- A second `korvoice` no longer deletes a running instance's socket; the
+  socket is only replaced when it is verifiably stale.
+- IPC commands are newline-delimited, size-limited and time-limited.
+- `Recorder.stop()` survives PortAudio errors (e.g. an unplugged microphone).
+- Boolean settings given as strings (`"false"`) are parsed correctly.
+- `--debug` logs the length of a transcription, not its text.
+- CI smoke-tests the built wheel in a clean virtualenv.
 - Clipboard managers: text that autotype puts in the clipboard only
   temporarily is now marked `x-kde-passwordManagerHint: secret`, so Klipper,
   CopyQ, cliphist and other managers that honour the hint don't record it.

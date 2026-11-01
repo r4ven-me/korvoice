@@ -94,6 +94,25 @@ jobs:
       - name: Check distribution metadata
         run: python -m twine check dist/*
 
+      - name: Smoke-test the built wheel
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes --no-install-recommends \
+            libegl1 libgl1 libportaudio2 libxcb-cursor0 libxkbcommon-x11-0
+          python -m venv "$RUNNER_TEMP/smoke"
+          "$RUNNER_TEMP/smoke/bin/pip" install dist/*.whl
+          cd "$RUNNER_TEMP"
+          "$RUNNER_TEMP/smoke/bin/korvoice" --version
+          QT_QPA_PLATFORM=offscreen "$RUNNER_TEMP/smoke/bin/python" -I - <<'PY'
+          from importlib import resources
+
+          import korvoice
+
+          icons = resources.files("korvoice") / "icons"
+          assert (icons / "icon-desktop.svg").is_file(), "SVG package data missing"
+          print("korvoice", korvoice.__version__, "imported from", korvoice.__file__)
+          PY
+
       - name: Upload distributions
         uses: actions/upload-artifact@v7
         with:

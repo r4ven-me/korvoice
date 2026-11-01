@@ -50,6 +50,18 @@ def test_get_invalid_boolean_falls_back_to_default(config):
     assert config.get("output_window") is True
 
 
+def test_obsolete_wake_word_keys_are_dropped_on_load(config_dir):
+    (config_dir / "config.yaml").write_text(
+        "general:\n  wake_word_enabled: true\n  wake_word_phrase: x\n  theme: nord-dark\n",
+        encoding="utf-8",
+    )
+
+    loaded = Config()
+
+    assert loaded.get("theme") == "nord-dark"
+    assert "wake_word" not in (config_dir / "config.yaml").read_text(encoding="utf-8")
+
+
 def test_broken_yaml_falls_back_to_defaults(config_dir):
     (config_dir / "config.yaml").write_text("not: valid: yaml: [", encoding="utf-8")
     config = Config()

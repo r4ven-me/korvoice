@@ -159,6 +159,10 @@ class Config:
                 self._data[section] = {}
                 changed = True
         general = self._data["general"]
+        # Keys of the removed wake-word feature.
+        for key in [k for k in general if str(k).startswith("wake_word_")]:
+            del general[key]
+            changed = True
         for key, value in GENERAL_DEFAULTS.items():
             if key not in general:
                 general[key] = value

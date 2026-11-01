@@ -134,3 +134,29 @@ def test_listen_exclusively_replaces_a_stale_socket_file(socket_name, qapp):
 
     assert server.isListening()
     server.close()
+
+
+def test_parse_ipc_command_rejects_garbage_and_oversized_input():
+    parse = app_mod.parse_ipc_command
+    assert parse(b'{"action": "quit"}\n') == {"action": "quit"}
+    assert parse(b"not json") == {"action": "noop"}
+    assert parse(b"[1, 2]") == {"action": "noop"}
+    assert parse(None) == {"action": "noop"}
+    assert parse(b" " * (app_mod.IPC_MAX_BYTES + 1)) == {"action": "noop"}
+
+
+def test_command_roundtrips_over_the_local_socket(socket_name, qapp):
+    from PySide6.QtTest import QTest
+
+    received = []
+    app = cast(Any, KorvoiceApp.__new__(KorvoiceApp))
+    app.server = QLocalServer()
+    app.handle = received.append
+    assert app.server.listen(socket_name)
+    app.server.newConnection.connect(app._on_connection)
+
+    assert app_mod.try_send_to_running({"action": "settings"}) == "sent"
+    QTest.qWait(200)
+
+    assert received == [{"action": "settings"}]
+    app.server.close()

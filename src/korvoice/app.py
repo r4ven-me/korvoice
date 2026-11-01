@@ -231,6 +231,22 @@ _STALE_SOCKET_ERRORS = (
 )
 
 
+IPC_MAX_BYTES = 16 * 1024
+IPC_TIMEOUT_MS = 5000
+
+
+def parse_ipc_command(data: bytes | None) -> dict:
+    """One JSON object per message; anything malformed or oversized is a
+    harmless noop."""
+    if data is None or len(data) > IPC_MAX_BYTES:
+        return {"action": "noop"}
+    try:
+        command = json.loads(data.decode("utf-8", errors="replace").strip())
+    except json.JSONDecodeError:
+        return {"action": "noop"}
+    return command if isinstance(command, dict) else {"action": "noop"}
+
+
 def try_send_to_running(command: dict) -> str:
     """Hands `command` to a running instance. Returns "sent", "none" (no
     instance — the socket is absent or stale) or "unresponsive" (something
@@ -239,7 +255,7 @@ def try_send_to_running(command: dict) -> str:
     socket.connectToServer(SOCKET_NAME)
     if not socket.waitForConnected(1000):
         return "none" if socket.error() in _STALE_SOCKET_ERRORS else "unresponsive"
-    socket.write(QByteArray(json.dumps(command).encode("utf-8")))
+    socket.write(QByteArray(json.dumps(command).encode("utf-8") + b"\n"))
     socket.flush()
     socket.waitForBytesWritten(1000)
     socket.disconnectFromServer()
@@ -622,16 +638,32 @@ class KorvoiceApp:
         socket = self.server.nextPendingConnection()
         if socket is None:
             return
-        socket.readyRead.connect(lambda: self._read_command(socket))
+        # QLocalSocket is a byte stream: a command is one JSON line, but a
+        # client that only closes the connection (no newline) still works.
+        buffer = bytearray()
+        finished = False
 
-    def _read_command(self, socket) -> None:
-        data = bytes(socket.readAll()).decode("utf-8", errors="replace")
-        socket.disconnectFromServer()
-        try:
-            command = json.loads(data)
-        except json.JSONDecodeError:
-            command = {"action": "noop"}
-        self.handle(command)
+        def finish(data: bytes | None) -> None:
+            nonlocal finished
+            if finished:
+                return
+            finished = True
+            socket.disconnectFromServer()
+            socket.deleteLater()
+            self.handle(parse_ipc_command(data))
+
+        def on_ready_read() -> None:
+            if finished:
+                return
+            buffer.extend(bytes(socket.readAll()))
+            if len(buffer) > IPC_MAX_BYTES:
+                finish(None)
+            elif b"\n" in buffer:
+                finish(bytes(buffer))
+
+        socket.readyRead.connect(on_ready_read)
+        socket.disconnected.connect(lambda: finish(bytes(buffer)))
+        QTimer.singleShot(IPC_TIMEOUT_MS, lambda: finish(None))
 
 
 # ---------------------------------------------------------------------------
