@@ -222,16 +222,41 @@ def run_selftest(config: Config) -> int:
 # Single instance
 # ---------------------------------------------------------------------------
 
-def try_send_to_running(command: dict) -> bool:
+# A socket file nobody listens on makes connecting fail at once with one of
+# these errors. Any other failure (timeout, ...) means a process may still
+# own the socket, so it must not be taken over.
+_STALE_SOCKET_ERRORS = (
+    QLocalSocket.LocalSocketError.ServerNotFoundError,
+    QLocalSocket.LocalSocketError.ConnectionRefusedError,
+)
+
+
+def try_send_to_running(command: dict) -> str:
+    """Hands `command` to a running instance. Returns "sent", "none" (no
+    instance — the socket is absent or stale) or "unresponsive" (something
+    owns the socket but did not accept the connection)."""
     socket = QLocalSocket()
     socket.connectToServer(SOCKET_NAME)
-    if not socket.waitForConnected(300):
-        return False
+    if not socket.waitForConnected(1000):
+        return "none" if socket.error() in _STALE_SOCKET_ERRORS else "unresponsive"
     socket.write(QByteArray(json.dumps(command).encode("utf-8")))
     socket.flush()
     socket.waitForBytesWritten(1000)
     socket.disconnectFromServer()
-    return True
+    return "sent"
+
+
+def _listen_exclusively(server: QLocalServer) -> None:
+    """listen() on the instance socket, clearing a stale socket file left by
+    a crash. A live owner is never displaced: starting a second daemon would
+    double every hotkey, microphone and clipboard handler."""
+    if server.listen(SOCKET_NAME):
+        return
+    if try_send_to_running({"action": "noop"}) != "none":
+        raise RuntimeError("another korvoice instance is already running")
+    QLocalServer.removeServer(SOCKET_NAME)
+    if not server.listen(SOCKET_NAME):
+        raise RuntimeError(f"cannot listen on {SOCKET_NAME}: {server.errorString()}")
 
 
 # ---------------------------------------------------------------------------
@@ -302,8 +327,7 @@ class KorvoiceApp:
         # send commands (force --quit, open windows) — restrict to the
         # owning user, same as kortalk.
         self.server.setSocketOptions(QLocalServer.SocketOption.UserAccessOption)
-        QLocalServer.removeServer(SOCKET_NAME)  # clean up the socket after a crash
-        self.server.listen(SOCKET_NAME)
+        _listen_exclusively(self.server)
         self.server.newConnection.connect(self._on_connection)
 
         # IMPORTANT: keep the menu in an attribute — setContextMenu does
@@ -496,7 +520,7 @@ class KorvoiceApp:
     def _on_result(self, text: str) -> None:
         elapsed = time.monotonic() - self._transcribe_started_at
         log.info("transcription finished in %.2fs", elapsed)
-        log.debug("transcription result: %r", text)
+        log.debug("transcription result: %d characters", len(text))
         self.state = "idle"
         self._update_tray_visuals(force_refresh=True)
         if text:
@@ -588,6 +612,7 @@ class KorvoiceApp:
         self.hotkeys.stop()
         if self.state == "recording":
             self.recorder.stop()
+        self.engine.shutdown()
         self.output.shutdown()
         self.app.quit()
 
@@ -639,10 +664,15 @@ def main(argv: list[str] | None = None) -> int:
     ensure_desktop_entry()
 
     if not args.check:
-        if try_send_to_running(command):
+        delivery = try_send_to_running(command)
+        if delivery == "sent":
             if command["action"] == "daemon":
                 print("korvoice is already running.", file=sys.stderr)
             return 0
+        if delivery == "unresponsive":
+            print("Error: another korvoice instance owns the socket but does not respond.",
+                  file=sys.stderr)
+            return 1
         if args.quit_:
             print("korvoice is not running.", file=sys.stderr)
             return 1

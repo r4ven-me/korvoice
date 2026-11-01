@@ -197,6 +197,36 @@ def test_unavailable_x11_autotype_does_not_change_clipboard(config, qapp, monkey
     assert QGuiApplication.clipboard().text() == "previous"
 
 
+def test_autotype_skipped_when_clipboard_write_fails(config, qapp, monkeypatch):
+    config.set("output_clipboard", False)
+    dispatcher = OutputDispatcher(config)
+    monkeypatch.setattr(dispatcher, "_autotype_command", lambda _text: ["/usr/bin/xdotool"])
+    monkeypatch.setattr(QtClipboard, "set_text", lambda *_args, **_kwargs: False)
+    started = []
+    monkeypatch.setattr(output_mod.subprocess, "run", lambda *a, **k: started.append(a))
+    messages = []
+    dispatcher.autotype_unavailable.connect(messages.append)
+    QGuiApplication.clipboard().setText("secret password")
+
+    dispatcher._autotype("recognized")
+
+    assert not dispatcher._autotype_workers
+    assert started == []
+    assert len(messages) == 1
+    assert QGuiApplication.clipboard().text() == "secret password"
+
+
+def test_autotype_skipped_when_clipboard_does_not_hold_the_text(config, qapp, monkeypatch):
+    config.set("output_clipboard", True)
+    dispatcher = OutputDispatcher(config)
+    monkeypatch.setattr(dispatcher, "_autotype_command", lambda _text: ["/usr/bin/xdotool"])
+    QGuiApplication.clipboard().setText("something else")
+
+    dispatcher._autotype("recognized")
+
+    assert not dispatcher._autotype_workers
+
+
 def test_autotype_restores_all_previous_clipboard_formats(config, qapp):
     dispatcher = OutputDispatcher(config)
     original = QMimeData()

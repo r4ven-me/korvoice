@@ -152,10 +152,24 @@ class OutputDispatcher(QObject):
                 self._temporary_clipboard_original = backend.snapshot()
             self._clipboard_generation += 1
             clipboard_generation = self._clipboard_generation
-            backend.set_text(text, hide_from_history=self._hide_mode() in ("temporary", "all"))
-        # Otherwise dispatch() has just put this same text in the clipboard
-        # via _to_clipboard(); setting it again would only add a duplicate
-        # entry to clipboard managers.
+            copied = backend.set_text(
+                text, hide_from_history=self._hide_mode() in ("temporary", "all"))
+        else:
+            # dispatch() has just put this same text in the clipboard via
+            # _to_clipboard(); setting it again would only add a duplicate
+            # entry to clipboard managers.
+            copied = True
+        # Never send the paste shortcut unless the clipboard really holds
+        # the recognized text: otherwise whatever was copied before (a
+        # password, say) would be pasted into the focused window.
+        if not copied or backend.text() != text:
+            if restore_clipboard:
+                self._temporary_clipboard_original = None
+            log.warning("autotype skipped: could not put the text in the clipboard")
+            self.autotype_unavailable.emit(
+                tr("Could not put the text in the clipboard — autotype skipped")
+            )
+            return
 
         worker = _AutotypeWorker(command, self)
         worker.succeeded.connect(self.autotype_succeeded)

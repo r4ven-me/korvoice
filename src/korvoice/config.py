@@ -2,11 +2,14 @@
 
 from __future__ import annotations
 
+import logging
 import os
 import tempfile
 from pathlib import Path
 
 import yaml
+
+log = logging.getLogger(__name__)
 
 CONFIG_DIR = Path(os.environ.get("XDG_CONFIG_HOME", str(Path.home() / ".config"))) / "korvoice"
 CONFIG_FILE = CONFIG_DIR / "config.yaml"
@@ -111,6 +114,27 @@ HOTKEY_DEFAULTS = {
 }
 
 
+_TRUE_STRINGS = {"true", "yes", "1", "on"}
+_FALSE_STRINGS = {"false", "no", "0", "off"}
+
+
+def _parse_bool(key: str, value, default: bool) -> bool:
+    """bool("false") is True — a hand-edited config.yaml with a quoted
+    string must not silently flip a setting on."""
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, (int, float)) and value in (0, 1):
+        return bool(value)
+    if isinstance(value, str):
+        text = value.strip().lower()
+        if text in _TRUE_STRINGS:
+            return True
+        if text in _FALSE_STRINGS:
+            return False
+    log.warning("config: %r is not a valid boolean for %s, using %r", value, key, default)
+    return default
+
+
 class Config:
     """YAML config with sections general / hotkeys. Written to disk on
     every change (write-through)."""
@@ -152,7 +176,7 @@ class Config:
         default = GENERAL_DEFAULTS[key]
         value = self._data["general"].get(key, default)
         if isinstance(default, bool):
-            return bool(value)
+            return _parse_bool(key, value, default)
         if isinstance(default, int):
             try:
                 return int(value)

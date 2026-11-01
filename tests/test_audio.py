@@ -14,6 +14,29 @@ class _FakeStream:
         return None
 
 
+def test_stop_survives_portaudio_errors_and_resets_stream():
+    class FailingStream:
+        closed = False
+
+        def stop(self):
+            raise audio_mod.sd.PortAudioError("device gone")
+
+        def close(self):
+            self.closed = True
+            raise audio_mod.sd.PortAudioError("device gone")
+
+    recorder = Recorder()
+    stream = FailingStream()
+    recorder._stream = stream
+    recorder._frames = [np.ones(4, dtype=np.float32)]
+
+    audio = recorder.stop()
+
+    assert stream.closed  # close() is still attempted after stop() failed
+    assert recorder._stream is None
+    assert len(audio) == 4
+
+
 def test_samplerate_defaults_to_sample_rate_before_start():
     recorder = Recorder()
     assert recorder.samplerate == SAMPLE_RATE

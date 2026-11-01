@@ -23,6 +23,11 @@ log = logging.getLogger(__name__)
 
 _threads_configured = False
 
+# Workers that outlived Engine.shutdown()'s wait. Destroying a QThread that
+# is still running aborts the process, so they are kept alive (detached from
+# the dying engine) until the interpreter exits.
+_abandoned_workers: list[QThread] = []
+
 
 def _configure_torch_threads() -> None:
     """Caps torch's CPU thread pool before the first model load.
@@ -146,6 +151,8 @@ class Engine(QObject):
         self._model_key: tuple[str, str] | None = None
         self._loading_key: tuple[str, str] | None = None
         self._pending_audio: np.ndarray | None = None
+        self._workers: list[QThread] = []
+        self._closing = False
 
     def _configured_key(self) -> tuple[str, str]:
         return str(self.config.get("model")), str(self.config.get("device"))
@@ -157,6 +164,8 @@ class Engine(QObject):
         doesn't also have to eat the ~3-5s cold load (torch import +
         weights), and again after Settings → Save, so switching the model
         doesn't move that wait onto the next dictation."""
+        if self._closing:
+            return
         key = self._configured_key()
         if self._model is not None and self._model_key == key:
             return
@@ -165,6 +174,8 @@ class Engine(QObject):
         self._start_load(key)
 
     def transcribe(self, audio: np.ndarray) -> None:
+        if self._closing:
+            return
         if audio.size < MIN_TRANSCRIBE_SAMPLES:
             log.debug(
                 "audio too short to transcribe: %.3fs (minimum %.3fs)",
@@ -189,11 +200,36 @@ class Engine(QObject):
         worker = _ModelLoadWorker(key[0], key[1], self)
         worker.loaded.connect(lambda model, k=key: self._on_loaded(model, k))
         worker.failed.connect(self._on_load_failed)
+        self._run_worker(worker)
+
+    def _run_worker(self, worker: QThread) -> None:
+        self._workers.append(worker)
+        worker.finished.connect(lambda w=worker: self._worker_finished(w))
         worker.finished.connect(worker.deleteLater)
         worker.start()
 
+    def _worker_finished(self, worker: QThread) -> None:
+        if worker in self._workers:
+            self._workers.remove(worker)
+
+    def shutdown(self, timeout_ms: int = 15000) -> None:
+        """Stops accepting work and waits for the running load/transcribe
+        threads — destroying a QThread that is still running crashes the
+        process. Inference itself can't be cancelled, so the wait is bounded;
+        a thread that outlives it is kept alive until the process exits."""
+        self._closing = True
+        self._pending_audio = None
+        for worker in list(self._workers):
+            if not worker.wait(timeout_ms):
+                log.warning("%s still running at shutdown, abandoning it", type(worker).__name__)
+                worker.setParent(None)
+                _abandoned_workers.append(worker)
+        self._workers.clear()
+
     def _on_loaded(self, model, key: tuple[str, str]) -> None:
         self._loading_key = None
+        if self._closing:
+            return
         current = self._configured_key()
         if key != current:
             # Settings changed while this load was running — the result is
@@ -219,5 +255,4 @@ class Engine(QObject):
         worker = _TranscribeWorker(self._model, audio, max_seconds, self)
         worker.finished_ok.connect(self.result_ready)
         worker.failed.connect(self.error)
-        worker.finished.connect(worker.deleteLater)
-        worker.start()
+        self._run_worker(worker)

@@ -100,10 +100,16 @@ class Recorder:
         """Stops capture and returns the full recording as float32 in
         [-1, 1], resampled to SAMPLE_RATE (16kHz). Safe to call even if
         start() was never called."""
-        if self._stream is not None:
-            self._stream.stop()
-            self._stream.close()
-            self._stream = None
+        stream, self._stream = self._stream, None
+        if stream is not None:
+            # A vanished device (unplugged USB mic) makes PortAudio raise
+            # here; the recording state must still reset and the audio
+            # captured so far is still usable.
+            for release in (stream.stop, stream.close):
+                try:
+                    release()
+                except sd.PortAudioError as exc:
+                    log.warning("could not release the input stream: %s", exc)
         with self._lock:
             frames, self._frames = self._frames, []
         if not frames:

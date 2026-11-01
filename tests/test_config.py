@@ -36,6 +36,20 @@ def test_get_coerces_bool_type(config):
     assert config.get("output_window") is False
 
 
+def test_get_parses_boolean_strings(config):
+    config.set("output_window", "false")
+    assert config.get("output_window") is False
+    config.set("output_window", "Yes")
+    assert config.get("output_window") is True
+
+
+def test_get_invalid_boolean_falls_back_to_default(config):
+    config.set("output_window", "maybe")
+    assert config.get("output_window") is True  # the default
+    config.set("output_window", 5)
+    assert config.get("output_window") is True
+
+
 def test_broken_yaml_falls_back_to_defaults(config_dir):
     (config_dir / "config.yaml").write_text("not: valid: yaml: [", encoding="utf-8")
     config = Config()
