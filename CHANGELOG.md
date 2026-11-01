@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+## [1.0.7] - 2026-11-01
+
+- CI: run on `ubuntu-24.04` instead of `ubuntu-latest`. The 26.04 image ships
+  a PortAudio that fails to initialize without a sound server, which broke
+  the test collection. v1.0.6 was tagged but never published to PyPI.
+
 ## [1.0.6] - 2026-11-01
 
 - Removed the wake-word feature (Vosk listener, its settings, the `wakeword`
@@ -83,7 +89,8 @@
   speech recognition, Nord tray/settings GUI, clipboard/autotype/window
   output.
 
-[Unreleased]: https://github.com/r4ven-me/korvoice/compare/v1.0.6...HEAD
+[Unreleased]: https://github.com/r4ven-me/korvoice/compare/v1.0.7...HEAD
+[1.0.7]: https://github.com/r4ven-me/korvoice/compare/v1.0.6...v1.0.7
 [1.0.6]: https://github.com/r4ven-me/korvoice/compare/v1.0.5...v1.0.6
 [1.0.5]: https://github.com/r4ven-me/korvoice/compare/v1.0.2...v1.0.5
 [1.0.2]: https://github.com/r4ven-me/korvoice/compare/v1.0.1...v1.0.2
