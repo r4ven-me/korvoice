@@ -84,7 +84,7 @@ Settings (`~/.config/korvoice/config.yaml`, YAML, written on every change):
 | --- | --- | --- |
 | Theme | `system` / `nord-dark` / `nord-light` | `system` |
 | Interface language | `system` / `ru` / `en` | `system` |
-| Tray icon colour | `auto` / `dark` / `light` | `auto` |
+| Tray icon colour | `auto` (full color) / `dark` / `light` (monochrome) | `auto` |
 | Recording mode | `push_to_talk` / `toggle` | `push_to_talk` |
 | Record hotkey | `Ctrl+Alt+...`-style combination, or a single modifier (Right/Left Ctrl/Shift/Alt/Super) | `Ctrl+Alt+Space` |
 | Model | `v3_e2e_ctc` / `v3_e2e_rnnt` / `v3_ctc` / `v3_rnnt` | `v3_e2e_ctc` |

@@ -132,14 +132,14 @@ class SettingsDialog(QDialog):
         form.addRow(tr("Language:"), self.language_combo)
 
         self.tray_icon_combo = QComboBox()
-        self.tray_icon_combo.addItem(tr("Auto (theme)"), "auto")
+        self.tray_icon_combo.addItem(tr("Color (default)"), "auto")
         self.tray_icon_combo.addItem(tr("Dark"), "dark")
         self.tray_icon_combo.addItem(tr("Light"), "light")
         tray_index = self.tray_icon_combo.findData(str(self.config.get("tray_icon")))
         self.tray_icon_combo.setCurrentIndex(max(0, tray_index))
         self.tray_icon_combo.setToolTip(tr(
-            "The system tray's own background isn't always the same as the "
-            "app's theme — pick a fixed icon colour if \"Auto\" is hard to see."
+            "Use the color icon, or choose a dark or light monochrome variant "
+            "to suit the system tray's background."
         ))
         form.addRow(tr("Tray icon:"), self.tray_icon_combo)
 

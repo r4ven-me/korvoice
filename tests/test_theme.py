@@ -1,4 +1,4 @@
-from PySide6.QtGui import QColor
+from PySide6.QtGui import QColor, QIcon
 
 from korvoice import theme
 
@@ -38,9 +38,31 @@ def test_make_tray_icon_not_null(qapp):
     assert not icon.isNull()
 
 
+def test_default_tray_icon_is_color_and_theme_independent(qapp):
+    expected = QIcon(str(theme.DESKTOP_ICON)).pixmap(24, 24).toImage()
+    original_palette = qapp.palette()
+    try:
+        for palette in (theme.nord_dark_palette(), theme.nord_light_palette()):
+            qapp.setPalette(palette)
+            actual = theme.make_tray_icon().pixmap(24, 24).toImage()
+            assert actual == expected
+            body = actual.pixelColor(12, 12)
+            assert body.alpha() > 0
+            assert body.blue() > body.red()
+    finally:
+        qapp.setPalette(original_palette)
+
+
+def test_explicit_tray_icon_variants(qapp):
+    for setting, source in (("dark", theme.LIGHT_ICON), ("light", theme.DARK_ICON)):
+        actual = theme.make_tray_icon(theme.tray_icon_color(setting)).pixmap(24, 24)
+        expected = QIcon(str(source)).pixmap(24, 24)
+        assert actual.toImage() == expected.toImage()
+
+
 def test_idle_tray_icon_is_freshly_rasterized(qapp):
-    first = theme.make_tray_icon(QColor("#ffffff"), state="idle")
-    second = theme.make_tray_icon(QColor("#ffffff"), state="idle")
+    first = theme.make_tray_icon(state="idle")
+    second = theme.make_tray_icon(state="idle")
 
     assert first.cacheKey() != second.cacheKey()
     assert not first.pixmap(24, 24).isNull()
@@ -58,7 +80,7 @@ def test_make_tray_icon_states_render_differently(qapp):
     # they're visually distinguishable — assert that directly, not just
     # that each icon exists.
     images = {
-        state: theme.make_tray_icon(QColor("#ffffff"), state=state).pixmap(64, 64).toImage()
+        state: theme.make_tray_icon(state=state).pixmap(64, 64).toImage()
         for state in ("idle", "recording", "transcribing")
     }
     assert images["idle"] != images["recording"]
@@ -66,9 +88,14 @@ def test_make_tray_icon_states_render_differently(qapp):
     assert images["recording"] != images["transcribing"]
 
 
-def test_install_icon_file_writes_black_desktop_svg(tmp_path, monkeypatch, qapp):
+def test_install_icon_file_writes_color_desktop_svg(tmp_path, monkeypatch, qapp):
     monkeypatch.setattr(theme, "ICON_FILE", tmp_path / "icons" / "korvoice.svg")
     path = theme.install_icon_file()
     assert path.exists()
     assert path.read_bytes() == theme.DESKTOP_ICON.read_bytes()
-    assert "#000000" in path.read_text(encoding="utf-8")
+    from PySide6.QtSvg import QSvgRenderer
+
+    renderer = QSvgRenderer(str(path))
+    assert renderer.isValid()
+    assert renderer.defaultSize().width() == 512
+    assert renderer.defaultSize().height() == 512

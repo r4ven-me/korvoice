@@ -281,18 +281,15 @@ def _app_instance():
 
 # -- tray icon ----------------------------------------------------------------
 #
-# A microphone glyph drawn directly with QPainter (capsule head + stand +
-# base), rather than a sourced SVG asset — simple enough to draw exactly,
-# Base SVG icons supplied with the application.  The two variants use the
-# extreme Nord tones: Snow Storm n6 for dark surfaces and Polar Night n00
-# for light surfaces.
+# The tray uses the full-color desktop icon by default. Optional symbolic
+# variants use Snow Storm n6 and Polar Night n00 for a monochrome appearance.
 _STATE_DOT_COLORS = {"recording": "n11", "transcribing": "n13"}
 _ICON_DIR = Path(__file__).with_name("icons")
 LIGHT_ICON = _ICON_DIR / "icon-light.svg"
 DARK_ICON = _ICON_DIR / "icon-dark.svg"
 DESKTOP_ICON = _ICON_DIR / "icon-desktop.svg"
 
-# Static dark icon for the applications-menu launcher and autostart entry.
+# Full-color icon for the applications-menu launcher and autostart entry.
 # pip/pipx installs the source asset inside the package; korvoice copies it
 # to the user's icon directory so desktop files can reference a stable path.
 ICON_FILE = (Path(os.environ.get("XDG_DATA_HOME", str(Path.home() / ".local" / "share")))
@@ -300,7 +297,7 @@ ICON_FILE = (Path(os.environ.get("XDG_DATA_HOME", str(Path.home() / ".local" / "
 
 
 def install_icon_file() -> Path:
-    """Installs the dark Nord SVG used by desktop and autostart entries."""
+    """Installs the full-color SVG used by desktop and autostart entries."""
     try:
         ICON_FILE.parent.mkdir(parents=True, exist_ok=True)
         ICON_FILE.write_bytes(DESKTOP_ICON.read_bytes())
@@ -309,33 +306,28 @@ def install_icon_file() -> Path:
     return ICON_FILE
 
 
-# Settings → General → "Tray icon" — a manual override for make_tray_icon's
-# default palette-following colour. The system tray's own background isn't
-# necessarily the same as the app's chosen theme, so "auto" doesn't always
-# pick a legible icon.
+# Keep the stored "auto" value compatible: it now selects the full-color
+# icon, while dark/light explicitly select the monochrome variants.
 _TRAY_ICON_COLORS = {"dark": NORD["n00"], "light": NORD["n6"]}
 
 
 def tray_icon_color(setting: str) -> QColor | None:
-    """Returns the requested extreme Nord tone, or None for automatic."""
+    """Returns the requested monochrome tone, or None for the full-color icon."""
     tone = _TRAY_ICON_COLORS.get(setting)
     return QColor(tone) if tone else None
 
 
 def make_tray_icon(color: QColor | str | None = None, state: str = "idle") -> QIcon:
-    """Returns a freshly rasterized icon suited to the current theme.
+    """Returns a fresh full-color icon, or a requested monochrome variant.
 
     Every state, including idle, is built as a new pixmap-backed QIcon. Some
     system trays cache file-backed SVG icons and otherwise keep showing the
     previous recording/transcribing dot after the application returned to
     idle. Recording and transcription use red/yellow state dots.
     """
-    if color is None:
-        app = _app_instance()
-        color = (app.palette().color(QPalette.ColorRole.WindowText)
-                 if app is not None else QColor(NORD["n6"]))
-    color = QColor(color)
-    source = LIGHT_ICON if color.lightness() >= 128 else DARK_ICON
+    source = DESKTOP_ICON
+    if color is not None:
+        source = DARK_ICON if QColor(color).lightness() >= 128 else LIGHT_ICON
     base = QIcon(str(source))
     dot_color = _STATE_DOT_COLORS.get(state)
 

@@ -87,9 +87,7 @@ SINGLE_KEY_CHOICES = [
 GENERAL_DEFAULTS = {
     "theme": "system",          # system | nord-dark | nord-light
     "language": "system",       # system | ru | en
-    # auto = follow the app's own theme; dark/light pin a specific icon
-    # colour regardless of it — the system tray's own background isn't
-    # necessarily the same as the app's theme (see theme.tray_icon_color).
+    # auto = full-color icon; dark/light select a monochrome variant.
     "tray_icon": "auto",
     "mode": "push_to_talk",     # push_to_talk | toggle
     "model": "v3_e2e_ctc",
