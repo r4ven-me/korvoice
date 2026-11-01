@@ -32,7 +32,13 @@ from PySide6.QtWidgets import QApplication, QMenu, QSystemTrayIcon
 
 from . import __version__, theme
 from .asr import Engine
-from .audio import MIN_TRANSCRIBE_SAMPLES, SAMPLE_RATE, Recorder, list_input_devices
+from .audio import (
+    MIN_TRANSCRIBE_SAMPLES,
+    SAMPLE_RATE,
+    SOUND_ERROR,
+    Recorder,
+    list_input_devices,
+)
 from .config import Config
 from .hotkeys import GlobalHotkeys
 from .i18n import set_language, tr
@@ -198,7 +204,8 @@ def run_selftest(config: Config) -> int:
 
     devices = list_input_devices()
     report(f"microphone input device(s) found: {len(devices)}", len(devices) > 0,
-           "no input device seen by sounddevice/PortAudio")
+           f"audio system unavailable: {SOUND_ERROR}" if SOUND_ERROR
+           else "no input device seen by sounddevice/PortAudio")
 
     if platform == "xcb":
         report("xdotool in PATH (X11 autotype)", shutil.which("xdotool") is not None,

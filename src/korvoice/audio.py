@@ -16,7 +16,29 @@ import wave
 from pathlib import Path
 
 import numpy as np
-import sounddevice as sd
+
+try:
+    import sounddevice as sd
+    SOUND_ERROR = ""
+except Exception as _exc:  # noqa: BLE001 — OSError (no libportaudio) or PortAudioError
+    # Importing sounddevice initializes PortAudio, which fails without an
+    # audio system. Keep the app importable (--version, --check, settings)
+    # and report the problem when the microphone is actually needed.
+    SOUND_ERROR = str(_exc) or type(_exc).__name__
+
+    class _SoundUnavailableError(Exception):
+        pass
+
+    class _UnavailableSounddevice:
+        PortAudioError = _SoundUnavailableError
+
+        def __getattr__(self, _name):
+            def unavailable(*_args, **_kwargs):
+                raise _SoundUnavailableError(f"audio system unavailable: {SOUND_ERROR}")
+
+            return unavailable
+
+    sd = _UnavailableSounddevice()
 
 SAMPLE_RATE = 16000  # GigaAM's fixed expectation (gigaam.preprocess.SAMPLE_RATE)
 MIN_TRANSCRIBE_SAMPLES = SAMPLE_RATE // 10  # ignore accidental taps shorter than 100 ms

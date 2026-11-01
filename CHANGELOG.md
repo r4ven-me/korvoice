@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+- Without a working audio system (no PortAudio, no sound server) korvoice still
+  starts: `--version`, `--check` and Settings work, `--check` reports the
+  reason, and recording fails with a clear message instead of an import crash.
+
 ## [1.0.7] - 2026-11-01
 
 - CI: run on `ubuntu-24.04` instead of `ubuntu-latest`. The 26.04 image ships

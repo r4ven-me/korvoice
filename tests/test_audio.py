@@ -214,3 +214,34 @@ def test_write_wav_clips_out_of_range_values(tmp_path):
     pcm16 = np.frombuffer(frames, dtype=np.int16)
     assert pcm16[0] == 32767
     assert pcm16[1] == -32767
+
+
+def _load_audio_without_sounddevice(monkeypatch):
+    import importlib.util
+    import sys
+
+    monkeypatch.setitem(sys.modules, "sounddevice", None)  # import raises ImportError
+    spec = importlib.util.spec_from_file_location("audio_without_sd", audio_mod.__file__)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def test_audio_imports_without_an_audio_system(monkeypatch):
+    module = _load_audio_without_sounddevice(monkeypatch)
+
+    assert module.SOUND_ERROR
+    assert module.list_input_devices() == []
+    assert module.resolve_samplerate(None) == module.SAMPLE_RATE
+
+
+def test_recorder_start_reports_missing_audio_system(monkeypatch):
+    module = _load_audio_without_sounddevice(monkeypatch)
+    recorder = module.Recorder()
+
+    try:
+        recorder.start()
+    except module.sd.PortAudioError as exc:
+        assert "audio system unavailable" in str(exc)
+    else:
+        raise AssertionError("start() must fail without an audio system")
