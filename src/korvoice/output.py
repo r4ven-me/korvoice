@@ -74,6 +74,24 @@ def _is_wayland() -> bool:
     return QGuiApplication.platformName().startswith("wayland")
 
 
+def active_window_id() -> str | None:
+    """X11 id of the focused window, or None where it can't be told
+    (Wayland has no portable way, xdotool missing, nothing focused)."""
+    if QGuiApplication.platformName() != "xcb":
+        return None
+    tool = shutil.which("xdotool")
+    if not tool:
+        return None
+    try:
+        result = subprocess.run(
+            [tool, "getactivewindow"], capture_output=True, text=True, timeout=1, check=False,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return None
+    window = result.stdout.strip()
+    return window if result.returncode == 0 and window else None
+
+
 @functools.lru_cache(maxsize=4)
 def ydotool_is_legacy(tool: str) -> bool:
     """True for ydotool 0.1.x, whose command list (printed when run with no
@@ -98,10 +116,18 @@ class OutputDispatcher(QObject):
         # QThread is still alive is a use-after-free waiting to happen.
         self._autotype_workers: list[_AutotypeWorker] = []
         self._qt_clipboard = QtClipboard()
+        self._target_window: str | None = None
         self._clipboard_generation = 0
         self._temporary_clipboard_original = None
 
+    def remember_target_window(self) -> None:
+        """Called when a recording starts: autotype must go to the window the
+        user was dictating into, not whichever one has focus when recognition
+        finishes (X11 only)."""
+        self._target_window = active_window_id()
+
     def dispatch(self, text: str) -> None:
+        target, self._target_window = self._target_window, None
         if not text:
             return
         if bool(self.config.get("remove_fillers")):
@@ -112,7 +138,7 @@ class OutputDispatcher(QObject):
         if bool(self.config.get("output_clipboard")):
             self._to_clipboard(text)
         if bool(self.config.get("output_autotype")):
-            self._autotype(text)
+            self._autotype(text, target)
         if bool(self.config.get("output_window")):
             self.delivered.emit(text)
 
@@ -133,7 +159,7 @@ class OutputDispatcher(QObject):
         self._temporary_clipboard_original = None
         self._clipboard_backend().set_text(text, hide_from_history=self._hide_mode() == "all")
 
-    def _autotype(self, text: str) -> None:
+    def _autotype(self, text: str, target_window: str | None = None) -> None:
         # Typing the text key by key is not an option: `xdotool type`
         # handles Cyrillic by repeatedly changing the X11 keymap, and those
         # synchronous X server operations can freeze the entire desktop for
@@ -143,6 +169,15 @@ class OutputDispatcher(QObject):
         command = self._autotype_command(text)
         if command is None:
             return  # _autotype_command already emitted the "unavailable" reason
+
+        if target_window is not None:
+            current = active_window_id()
+            if current is not None and current != target_window:
+                log.info("autotype skipped: the focused window changed during recognition")
+                self.autotype_unavailable.emit(
+                    tr("The active window changed while recognizing — autotype skipped")
+                )
+                return
 
         backend = self._clipboard_backend()
         restore_clipboard = not bool(self.config.get("output_clipboard"))

@@ -503,6 +503,7 @@ class KorvoiceApp:
                 "korvoice", tr("Could not start recording: {message}", message=exc),
                                   QSystemTrayIcon.MessageIcon.Warning)
             return
+        self.output.remember_target_window()
         self.state = "recording"
         self._record_started_at = time.monotonic()
         self._update_tray_visuals()

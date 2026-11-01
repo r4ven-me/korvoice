@@ -110,6 +110,7 @@ _RU = {
     "Selected microphone is unavailable; using the system default.": "Выбранный микрофон недоступен; используется системный микрофон.",
     "Recognition failed: {message}": "Ошибка распознавания: {message}",
     "Autotype unavailable: {message}": "Автовставка недоступна: {message}",
+    "The active window changed while recognizing — autotype skipped": "Активное окно сменилось во время распознавания — автовставка пропущена",
     "Could not put the text in the clipboard — autotype skipped": "Не удалось поместить текст в буфер обмена — автовставка пропущена",
     "xdotool not found — install it for autotype on X11 (e.g. sudo apt install xdotool)": "xdotool не найден — установите его для автовставки в X11 (например: sudo apt install xdotool)",
     "ydotool not found — install it and run ydotoold for autotype on Wayland": "ydotool не найден — установите его и запустите ydotoold для автовставки в Wayland",

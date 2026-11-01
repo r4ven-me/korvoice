@@ -291,7 +291,7 @@ def test_dispatch_appends_configured_suffix_to_every_sink(config, qapp, monkeypa
     dispatcher = OutputDispatcher(config)
     autotyped = []
     delivered = []
-    monkeypatch.setattr(dispatcher, "_autotype", autotyped.append)
+    monkeypatch.setattr(dispatcher, "_autotype", lambda text, _target=None: autotyped.append(text))
     dispatcher.delivered.connect(delivered.append)
 
     dispatcher.dispatch("recognized")
@@ -422,3 +422,40 @@ def test_shutdown_waits_for_running_autotype(config, qapp, monkeypatch):
 
     assert worker.isFinished()
     assert dispatcher._autotype_workers == []
+
+
+def test_autotype_skipped_when_focus_moved_to_another_window(config, qapp, monkeypatch):
+    dispatcher = _x11_autotype_dispatcher(config, monkeypatch, keep=True, hide="none")
+    monkeypatch.setattr(output_mod, "active_window_id", lambda: "222")
+    messages = []
+    dispatcher.autotype_unavailable.connect(messages.append)
+
+    dispatcher._autotype("recognized", target_window="111")
+
+    assert not dispatcher._autotype_workers
+    assert len(messages) == 1
+
+
+def test_autotype_proceeds_when_focus_is_unchanged_or_unknown(config, qapp, monkeypatch):
+    dispatcher = _x11_autotype_dispatcher(config, monkeypatch, keep=True, hide="none")
+    QGuiApplication.clipboard().setText("recognized")
+    for current in ("111", None):
+        monkeypatch.setattr(output_mod, "active_window_id", lambda current=current: current)
+        dispatcher._autotype("recognized", target_window="111")
+    assert len(dispatcher._autotype_workers) == 2
+
+
+def test_dispatch_hands_the_remembered_window_to_autotype(config, qapp, monkeypatch):
+    config.set("output_clipboard", False)
+    config.set("output_autotype", True)
+    config.set("output_window", False)
+    dispatcher = OutputDispatcher(config)
+    monkeypatch.setattr(output_mod, "active_window_id", lambda: "111")
+    calls = []
+    monkeypatch.setattr(dispatcher, "_autotype", lambda text, target=None: calls.append(target))
+
+    dispatcher.remember_target_window()
+    dispatcher.dispatch("one")
+    dispatcher.dispatch("two")  # the target is consumed by the first dispatch
+
+    assert calls == ["111", None]
